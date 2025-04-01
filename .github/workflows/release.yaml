@@ -1,13 +1,21 @@
-name: Version Bump
+name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump level (major, minor, patch)'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: 'patch'
 
 jobs:
-  bump-version:
-    name: Bump Version
+  release:
+    name: Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,7 +32,6 @@ jobs:
           git config --global user.email "github-actions@users.noreply.github.com"
           git config --global user.name "Github Actions"
 
-      - name: Bump Version
+      - name: Release
         run: |
-          cargo release beta --execute --no-publish --no-confirm
-
+          cargo release ${{ inputs.bump }} --execute --no-confirm --no-publish
