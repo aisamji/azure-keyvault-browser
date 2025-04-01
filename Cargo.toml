@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+
+members = []
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Ali Samji <aisamji09@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/aisamji/azkvbrowse"
+
