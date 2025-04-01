@@ -22,13 +22,9 @@ jobs:
       - name: Configure Git
         run: |
           git config --global user.email "github-actions@users.noreply.github.com"
-          git config --global user.name "github-actions"
+          git config --global user.name "Github Actions"
 
       - name: Bump Version
         run: |
-          cargo release beta --execute --no-confirm --no-tag --no-push
-
-      - name: Push Changes
-        run: |
-          git push
+          cargo release beta --execute --no-publish --no-confirm
 
