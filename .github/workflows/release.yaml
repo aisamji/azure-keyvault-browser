@@ -14,8 +14,9 @@ on:
         default: 'patch'
 
 jobs:
-  release:
-    name: Release
+  # TODO: Add jobs for `cargo test`, `cargo check`, and `cargo clippy`. All must pass before `release` can be run.
+  bump-version:
+    name: Bump Version
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -35,3 +36,5 @@ jobs:
       - name: Release
         run: |
           cargo release ${{ inputs.bump }} --execute --no-confirm --no-publish
+
+    # TODO: Create Github release based on above version/tag
