@@ -1,0 +1,6 @@
+[package]
+name = "xtask"
+version = "0.0.0" # Internal use only
+publish = false # Ensure we do not accidentally publish this package.
+
+[dependencies]
