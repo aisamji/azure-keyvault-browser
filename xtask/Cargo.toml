@@ -1,6 +1,8 @@
 [package]
 name = "xtask"
 version = "0.0.0" # Internal use only
+edition.workspace = true
+authors.workspace = true
 publish = false # Ensure we do not accidentally publish this package.
 
 [dependencies]

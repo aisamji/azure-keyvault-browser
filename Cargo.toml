@@ -1,18 +1,12 @@
 [workspace]
 resolver = "2"
 
-members = ["crates/*"]
-exclude = ["xtask"]
+members = ["crates/*", "xtask"]
+default-members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 authors = ["Ali Samji <aisamji09@gmail.com>"]
 license = "MIT"
-repository = "https://github.com/aisamji/azure-keyvault-browser"
-
-[workspace.metadata.release]
-tag-name = "v{{version}}"
-publish = false
-shared-version = true
-
+repository = "https://github.com/aisamji/azure-keyvault-tui"

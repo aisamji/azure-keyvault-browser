@@ -15,10 +15,3 @@ target/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Add Cargo.lock to gitignore (i.e. do not commit) if building a library-only project.
-# If building a binary/executable, leave it commented (i.e. commit Cargo.lock to git).
-# Cargo.lock
-
-# The xtask/Cargo.lock should always be committed, even if the root Cargo.lock is gitignored.
-# xtask contains build commands to help with developer tooling and is not deployed to the enduser.
-!xtask/Cargo.lock
