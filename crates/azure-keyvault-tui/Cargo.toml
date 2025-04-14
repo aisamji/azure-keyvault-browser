@@ -1,0 +1,10 @@
+[package]
+name = "azure-keyvault-tui"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository = "https://github.com/aisamji/azure-keyvault-tui/tree/main/crates/azure-keyvault-tui"
+
+[dependencies]
+
