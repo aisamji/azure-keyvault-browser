@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::app::AppEvent;
+use crate::tui::TuiEvent;
 
 pub enum BackgroundTask {
     SleepTest,
 }
 
-pub async fn manager(rx: &mut Receiver<BackgroundTask>, tx: Sender<AppEvent>) {
+pub async fn manager(rx: &mut Receiver<BackgroundTask>, tx: Sender<TuiEvent>) {
     let mut spawned_tasks = vec![];
     while let Some(task_spec) = rx.recv().await {
         // Spawn a new task or thread for new BackgroundTasks and them to the Vec to keep track of
@@ -29,11 +29,11 @@ pub async fn manager(rx: &mut Receiver<BackgroundTask>, tx: Sender<AppEvent>) {
     }
 }
 
-async fn sleep_test(tx: Sender<AppEvent>) {
-    match tx.send(AppEvent::ModifyCount(1)).await {
+async fn sleep_test(tx: Sender<TuiEvent>) {
+    match tx.send(TuiEvent::ModifyCount(1)).await {
         Ok(_) => {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            let _ = tx.send(AppEvent::ModifyCount(-1)).await;
+            let _ = tx.send(TuiEvent::ModifyCount(-1)).await;
         }
         Err(_) => {
             // TUI is dead. Skip doing anything.

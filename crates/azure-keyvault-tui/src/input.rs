@@ -1,9 +1,9 @@
 use crossterm::event::{Event, KeyCode};
 use tokio::sync::mpsc::Sender;
 
-use crate::{app::AppEvent, background::BackgroundTask};
+use crate::{tui::TuiEvent, background::BackgroundTask};
 
-pub fn wait_for_inputs(tx_app_event: Sender<AppEvent>, tx_bg_task: Sender<BackgroundTask>) {
+pub fn wait_for_inputs(tx_tui_event: Sender<TuiEvent>, tx_bg_task: Sender<BackgroundTask>) {
     // We use expects in this closure because we want to crash the application if an error
     // occurs.
     // TODO: Maybe better to send a notification that read failed. In what situations does read
@@ -13,7 +13,7 @@ pub fn wait_for_inputs(tx_app_event: Sender<AppEvent>, tx_bg_task: Sender<Backgr
         match crossterm::event::read().expect("Could not receive events from terminal.") {
             Event::Key(key_event) => match key_event.code {
                 KeyCode::Char('q') => {
-                    let _ = tx_app_event.blocking_send(AppEvent::KillMe);
+                    let _ = tx_tui_event.blocking_send(TuiEvent::KillMe);
                     // We don't care if we get a SendError since that just means the UI thread
                     // is already dead.
                     break;

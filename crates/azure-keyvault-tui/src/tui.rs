@@ -8,22 +8,22 @@ use ratatui::{
 use tokio::sync::mpsc::Receiver;
 
 #[derive(Default)]
-pub struct App {
+pub struct Tui {
     active_tasks: i16,
 }
 
-impl App {
+impl Tui {
     pub fn run(
         &mut self,
         terminal: &mut DefaultTerminal,
-        rx: &mut Receiver<AppEvent>,
+        rx: &mut Receiver<TuiEvent>,
     ) -> io::Result<()> {
         loop {
             terminal.draw(|f| self.render(f))?;
             match rx.blocking_recv() {
-                Some(app_event) => match app_event {
-                    AppEvent::KillMe => break,
-                    AppEvent::ModifyCount(inc) => {
+                Some(tui_event) => match tui_event {
+                    TuiEvent::KillMe => break,
+                    TuiEvent::ModifyCount(inc) => {
                         self.active_tasks += inc;
                     }
                 },
@@ -45,7 +45,7 @@ impl App {
     }
 }
 
-pub enum AppEvent {
+pub enum TuiEvent {
     KillMe,
     ModifyCount(i16),
 }
