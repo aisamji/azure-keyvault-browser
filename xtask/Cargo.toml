@@ -6,3 +6,5 @@ authors.workspace = true
 publish = false # Ensure we do not accidentally publish this package.
 
 [dependencies]
+clap.workspace = true
+cargo_metadata = "0.19.2"
