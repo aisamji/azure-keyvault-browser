@@ -7,6 +7,7 @@ use ratatui::{
 };
 use tokio::sync::mpsc::Receiver;
 
+// All state mutations should be done in the run method only to avoid deadlocks.
 #[derive(Default)]
 pub struct Tui {
     active_tasks: i16,

@@ -8,24 +8,22 @@ pub enum BackgroundTask {
     SleepTest,
 }
 
-pub async fn manager(rx: &mut Receiver<BackgroundTask>, tx: Sender<TuiEvent>) {
+pub async fn manager(rx_bg_task: &mut Receiver<BackgroundTask>, tx_tui_event: Sender<TuiEvent>) {
     let mut spawned_tasks = vec![];
-    while let Some(task_spec) = rx.recv().await {
-        // Spawn a new task or thread for new BackgroundTasks and them to the Vec to keep track of
-        // them.
+    // Stay alive only while input thread is alive
+    while let Some(task_spec) = rx_bg_task.recv().await {
+        // Spawn a new task or thread for new BackgroundTasks and add them to the Vec to keep track
+        // of them.
         // TODO: There might be a better way to keep track of them.
         let handle = match task_spec {
-            BackgroundTask::SleepTest => tokio::task::spawn(sleep_test(tx.clone())),
+            BackgroundTask::SleepTest => tokio::task::spawn(sleep_test(tx_tui_event.clone())),
         };
         spawned_tasks.push(handle);
     }
 
     // Wait for all background tasks to finish.
     for handle in spawned_tasks {
-        match handle.await {
-            Ok(_) => {}
-            Err(e) => eprintln!("{:?}", e),
-        }
+        let _ = handle.await.inspect_err(|e| eprintln!("{:?}", e));
     }
 }
 
