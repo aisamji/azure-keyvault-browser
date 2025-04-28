@@ -20,7 +20,7 @@ impl Tui {
     pub fn run(
         &mut self,
         terminal: &mut DefaultTerminal,
-        rx: &mut Receiver<TuiEvent>,
+        mut rx: Receiver<TuiEvent>,
         tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
         loop {

@@ -8,7 +8,7 @@ pub enum TaskSpec {
     SleepTest,
 }
 
-pub async fn manager(rx_bg_task: &mut Receiver<TaskSpec>, tx_tui_event: Sender<TuiEvent>) {
+pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<TuiEvent>) {
     let mut spawned_tasks = vec![];
     // Stay alive only while main thread is alive
     while let Some(task_spec) = rx_bg_task.recv().await {

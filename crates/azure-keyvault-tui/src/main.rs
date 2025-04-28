@@ -14,13 +14,14 @@ async fn main() -> Result<()> {
     // TODO: Use Clap to parse arguments and configure the application before launching the TUI.
     let mut app = Tui::default();
 
-    let (tx_tui_event, mut rx_tui_event) = mpsc::channel(10);
-    let (tx_bg_task, mut rx_bg_task) = mpsc::channel(10);
+    // All rx must be mut, but the function calls take care of that.
+    let (tx_tui_event, rx_tui_event) = mpsc::channel(10);
+    let (tx_bg_task, rx_bg_task) = mpsc::channel(10);
 
     // Start main UI loop in separate thread
     let tui_handle = task::spawn_blocking(move || -> io::Result<()> {
         let mut terminal = ratatui::init();
-        let app_result = app.run(&mut terminal, &mut rx_tui_event, tx_bg_task);
+        let app_result = app.run(&mut terminal, rx_tui_event, tx_bg_task);
         // TODO: Send Kill to input thread. Might be able to leverage crossterm::event::poll.
         ratatui::restore();
         app_result
@@ -33,9 +34,7 @@ async fn main() -> Result<()> {
     });
 
     // Start Background Task Manager
-    let bg_man_handle = tokio::spawn(async move {
-        background::manager(&mut rx_bg_task, tx_tui_event).await;
-    });
+    let bg_man_handle = tokio::spawn(background::manager(rx_bg_task, tx_tui_event));
 
     // Wait for the main event loop to complete or crash
     let result = tui_handle.await?;
