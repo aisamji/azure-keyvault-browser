@@ -8,7 +8,7 @@ use ratatui::{
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::background::BackgroundTask;
+use crate::background::TaskSpec;
 
 // All state mutations should be done in the run method only to avoid deadlocks.
 #[derive(Default)]
@@ -21,7 +21,7 @@ impl Tui {
         &mut self,
         terminal: &mut DefaultTerminal,
         rx: &mut Receiver<TuiEvent>,
-        tx_bg_task: Sender<BackgroundTask>,
+        tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
         loop {
             terminal.draw(|f| self.render(f))?;
@@ -40,7 +40,7 @@ impl Tui {
                                 KeyCode::Char('t') => {
                                     // Launch a new background task
                                     tx_bg_task
-                                        .blocking_send(BackgroundTask::SleepTest)
+                                        .blocking_send(TaskSpec::SleepTest)
                                         .expect("Cannot communicate with background task manager. Thread is dead or channel has been accidentally closed.");
                                     // TODO: Do not use expect. Find a better solution. Print error
                                     // out to TUI

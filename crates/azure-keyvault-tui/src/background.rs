@@ -4,19 +4,19 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::tui::TuiEvent;
 
-pub enum BackgroundTask {
+pub enum TaskSpec {
     SleepTest,
 }
 
-pub async fn manager(rx_bg_task: &mut Receiver<BackgroundTask>, tx_tui_event: Sender<TuiEvent>) {
+pub async fn manager(rx_bg_task: &mut Receiver<TaskSpec>, tx_tui_event: Sender<TuiEvent>) {
     let mut spawned_tasks = vec![];
-    // Stay alive only while input thread is alive
+    // Stay alive only while main thread is alive
     while let Some(task_spec) = rx_bg_task.recv().await {
         // Spawn a new task or thread for new BackgroundTasks and add them to the Vec to keep track
         // of them.
         // TODO: There might be a better way to keep track of them.
         let handle = match task_spec {
-            BackgroundTask::SleepTest => tokio::task::spawn(sleep_test(tx_tui_event.clone())),
+            TaskSpec::SleepTest => tokio::task::spawn(sleep_test(tx_tui_event.clone())),
         };
         spawned_tasks.push(handle);
     }
