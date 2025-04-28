@@ -3,9 +3,9 @@ use std::io;
 use anyhow::Result;
 use tokio::{sync::mpsc, task};
 
-mod tui;
 mod background;
 mod input;
+mod tui;
 
 use tui::Tui;
 
@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
     // Start main UI loop in separate thread
     let tui_handle = task::spawn_blocking(move || -> io::Result<()> {
         let mut terminal = ratatui::init();
-        let app_result = app.run(&mut terminal, &mut rx_tui_event);
+        let app_result = app.run(&mut terminal, &mut rx_tui_event, tx_bg_task);
         // TODO: Send Kill to input thread. Might be able to leverage crossterm::event::poll.
         ratatui::restore();
         app_result
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     // Start Input loop in separate thread
     let tx_tui_event_clone = tx_tui_event.clone();
     tokio::spawn(async move {
-        input::wait_for_inputs(tx_tui_event_clone, tx_bg_task).await;
+        input::wait_for_inputs(tx_tui_event_clone).await;
     });
 
     // Start Background Task Manager
