@@ -28,8 +28,8 @@ async fn main() -> Result<()> {
 
     // Start Input loop in separate thread
     let tx_tui_event_clone = tx_tui_event.clone();
-    task::spawn_blocking(move || {
-        input::wait_for_inputs(tx_tui_event_clone, tx_bg_task);
+    tokio::spawn(async move {
+        input::wait_for_inputs(tx_tui_event_clone, tx_bg_task).await;
     });
 
     // Start Background Task Manager
@@ -41,5 +41,6 @@ async fn main() -> Result<()> {
     let result = tui_handle.await?;
     eprintln!("Waiting on background tasks to complete.");
     bg_man_handle.await?;
+    eprintln!("Background tasks finished.");
     Ok(result?)
 }
