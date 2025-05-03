@@ -11,20 +11,52 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::background::TaskSpec;
 
+/// Represents different types of events that can occur in the Terminal User Interface (TUI).
+/// 
+/// This enum represents various events that the TUI thread needs to handle, including
+/// terminal (i.e. [`crossterm`]) events and requests to modify state from the background tasks.
+/// Background tasks should not modify the TUI state directly to avoid race condtions and must send
+/// a [`TuiEvent`] describing the type of modification needs to be made.
+///
+/// # Example
+///
+/// ```rust
+/// use crossterm::event::{read, Event};
+/// use tokio::sync::mpsc;
+///
+/// let tx, _ = mpsc::channel(10);
+/// let event: Event = read()?;
+/// tx.blocking_send(TuiEvent::TerminalInteraction(event))?;
+/// ```
 pub enum TuiEvent {
-    /// Represents a interactive  by the user that needs to be processed by the system.
-    /// This variant wraps a [`crossterm::event::Event`] type that encapsulates user interactions.
-    UserInteraction(Event),
+    /// Represents an interactive event made by the user.
+    TerminalInteraction(Event),
+    /// Requests a modification of [`Tui::active_tasks`] by the specified amount.
     ModifyCount(i16),
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
+/// Represents the app state and handles state modification as well as rendering to the terminal.
+///
+/// Contains a `run` function that is used to start the main loop. The fields of this struct should
+/// not be modified by any threads other than the one executing [`Self::run`]. Any modification
+/// requests should be sent to the appropriate [`Sender`] channel.
 #[derive(Default)]
 pub struct Tui {
+    /// The number of active background tasks in the application.
     active_tasks: i16,
 }
 
 impl Tui {
+    /// Redraws the terminal every time a [`TuiEvent`] is received.
+    ///
+    /// Be sure to only call this function with [`tokio::task::spawn_blocking`]. This function
+    /// watches for [`TuiEvent`]s from the given [`Receiver`] in an infinite loop. Based on the
+    /// `TuiEvent` received, the function does one of three things: modify the state (i.e. fields
+    /// on the [`Tui`] instance, launch one or background tasks by sending [`TaskSpec`]s to the
+    /// given [`Sender`]s, or break out of the infinite loop (i.e. quit the application).
+    ///
+    /// The terminal is redrawn after processing each [`TuiEvent`].
     pub fn run(
         &mut self,
         terminal: &mut DefaultTerminal,
@@ -38,7 +70,7 @@ impl Tui {
                     TuiEvent::ModifyCount(inc) => {
                         self.active_tasks += inc;
                     }
-                    TuiEvent::UserInteraction(event) => {
+                    TuiEvent::TerminalInteraction(event) => {
                         match event {
                             Event::Key(key_event) => match key_event.code {
                                 KeyCode::Char('q') => {
@@ -63,7 +95,9 @@ impl Tui {
                         }
                     }
                 },
-                // If all senders have somehow been closed, we should kill this thread as well.
+                // If all senders of TuiEvents have somehow been closed, we should kill this thread as well.
+                // TODO: Should probably return an error since this means the input thread has
+                // crashed.
                 None => break,
             }
         }
@@ -71,6 +105,9 @@ impl Tui {
         Ok(())
     }
 
+    /// Renders [`ratatui::widgets::Widget`]s on the specified [`Frame`].
+    ///
+    /// A private helper function that should only be called from [`Tui::run`].
     fn render(&self, frame: &mut Frame<'_>) {
         let hello = Line::from(vec![
             Span::from("Hello World! I have "),

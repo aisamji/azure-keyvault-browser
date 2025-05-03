@@ -4,8 +4,9 @@ use tokio::sync::mpsc::Sender;
 
 use crate::tui::TuiEvent;
 
+/// Continuously forwards [`crossterm::event::Event`]s to the TUI thread using the given [`Sender`]
 pub async fn forwarder(tx_tui_event: Sender<TuiEvent>) {
-    // We use expects in this closure because we want to crash the application if an error
+    // We use expects in this function because we want to crash the application if an error
     // occurs.
     // TODO: Maybe better to send a notification that read failed. In what situations does read
     // fail?
@@ -15,7 +16,7 @@ pub async fn forwarder(tx_tui_event: Sender<TuiEvent>) {
     loop {
         if let Some(result) = reader.next().fuse().await {
             let event =
-                TuiEvent::UserInteraction(result.expect("Could not receive events from terminal."));
+                TuiEvent::TerminalInteraction(result.expect("Could not receive events from terminal."));
             let _ = tx_tui_event.send(event).await;
         }
     }
