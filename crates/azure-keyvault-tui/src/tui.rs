@@ -3,6 +3,7 @@ use std::io;
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     DefaultTerminal, Frame,
+    layout::{Constraint, Layout},
     style::Stylize as _,
     text::{Line, Span},
 };
@@ -53,11 +54,11 @@ impl Tui {
                                     // out to TUI
                                 }
                                 _ => {
-                                    // Not handled
+                                    // Other key combinations not handled
                                 }
                             },
                             _ => {
-                                // Not handled
+                                // Other events handled
                             }
                         }
                     }
@@ -71,12 +72,28 @@ impl Tui {
     }
 
     fn render(&self, frame: &mut Frame<'_>) {
-        let line = Line::from(vec![
+        let hello = Line::from(vec![
             Span::from("Hello World! I have "),
-            Span::from(self.active_tasks.to_string()).bold(),
+            Span::from(self.active_tasks.to_string()).bold().green(),
             Span::from(" tasks running in the background."),
+        ])
+        .centered();
+        let instructions = Line::from(vec![
+            Span::from("<Q>").blue().bold(),
+            Span::from(" Quit  "),
+            Span::from("<T>").blue().bold(),
+            Span::from(" Launch Background Task"),
+        ])
+        .centered();
+
+        let layout = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
         ]);
-        frame.render_widget(line, frame.area());
+        let [_, hello_area, instructions_area, _] = layout.areas(frame.area());
+        frame.render_widget(hello, hello_area);
+        frame.render_widget(instructions, instructions_area);
     }
 }
-
