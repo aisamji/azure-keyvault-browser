@@ -22,7 +22,6 @@ async fn main() -> Result<()> {
     let tui_handle = task::spawn_blocking(move || -> io::Result<()> {
         let mut terminal = ratatui::init();
         let app_result = app.run(&mut terminal, rx_tui_event, tx_bg_task);
-        // TODO: Send Kill to input thread. Might be able to leverage crossterm::event::poll.
         ratatui::restore();
         app_result
     });
