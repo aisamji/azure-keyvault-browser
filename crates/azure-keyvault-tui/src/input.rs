@@ -4,7 +4,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::tui::TuiEvent;
 
-pub async fn wait_for_inputs(tx_tui_event: Sender<TuiEvent>) {
+pub async fn forwarder(tx_tui_event: Sender<TuiEvent>) {
     // We use expects in this closure because we want to crash the application if an error
     // occurs.
     // TODO: Maybe better to send a notification that read failed. In what situations does read

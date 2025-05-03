@@ -10,6 +10,13 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::background::TaskSpec;
 
+pub enum TuiEvent {
+    /// Represents a interactive  by the user that needs to be processed by the system.
+    /// This variant wraps a [`crossterm::event::Event`] type that encapsulates user interactions.
+    UserInteraction(Event),
+    ModifyCount(i16),
+}
+
 // All state mutations should be done in the run method only to avoid deadlocks.
 #[derive(Default)]
 pub struct Tui {
@@ -73,9 +80,3 @@ impl Tui {
     }
 }
 
-pub enum TuiEvent {
-    /// Represents a interactive  by the user that needs to be processed by the system.
-    /// This variant wraps a [`crossterm::event::Event`] type that encapsulates user interactions.
-    UserInteraction(Event),
-    ModifyCount(i16),
-}
