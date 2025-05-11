@@ -42,10 +42,13 @@ async fn sleep_test(tx: Sender<TuiEvent>) {
     match tx.send(TuiEvent::ModifyCount(1)).await {
         Ok(_) => {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            let _ = tx.send(TuiEvent::ModifyCount(-1)).await;
+            if tx.send(TuiEvent::ModifyCount(-1)).await.is_err() {
+                // TUI thread is dead now. Send the log message to stderr.
+                eprintln!("Task completed.");
+            }
         }
         Err(_) => {
-            // TUI is dead. Skip doing anything.
+            // TUI is dead before we could even start. Skip doing anything.
         }
     }
 }
