@@ -31,9 +31,7 @@ async fn main() -> Result<()> {
 
     // Start Input loop in separate thread
     let tx_tui_event_clone = tx_tui_event.clone();
-    tokio::spawn(async move {
-        input::forwarder(tx_tui_event_clone).await;
-    });
+    tokio::spawn(input::forwarder(tx_tui_event_clone));
 
     // Start Background Task Manager
     let bg_man_handle = tokio::spawn(background::manager(rx_bg_task, tx_tui_event));
