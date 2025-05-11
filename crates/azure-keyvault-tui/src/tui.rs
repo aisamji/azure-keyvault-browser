@@ -12,7 +12,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::background::TaskSpec;
 
 /// Represents different types of events that can occur in the Terminal User Interface (TUI).
-/// 
+///
 /// This enum represents various events that the TUI thread needs to handle, including
 /// terminal (i.e. [`crossterm`]) events and requests to modify state from the background tasks.
 /// Background tasks should not modify the TUI state directly to avoid race condtions and must send
@@ -30,7 +30,7 @@ use crate::background::TaskSpec;
 /// ```
 pub enum TuiEvent {
     /// Represents an interactive event made by the user.
-    TerminalInteraction(Event),
+    TerminalEvent(Event),
     /// Requests a modification of [`Tui::active_tasks`] by the specified amount.
     ModifyCount(i16),
 }
@@ -70,28 +70,9 @@ impl Tui {
                     TuiEvent::ModifyCount(inc) => {
                         self.active_tasks += inc;
                     }
-                    TuiEvent::TerminalInteraction(event) => {
-                        match event {
-                            Event::Key(key_event) => match key_event.code {
-                                KeyCode::Char('q') => {
-                                    // Quit
-                                    break;
-                                }
-                                KeyCode::Char('t') => {
-                                    // Launch a new background task
-                                    tx_bg_task
-                                        .blocking_send(TaskSpec::SleepTest)
-                                        .expect("Cannot communicate with background task manager. Thread is dead or channel has been accidentally closed.");
-                                    // TODO: Do not use expect. Find a better solution. Print error
-                                    // out to TUI
-                                }
-                                _ => {
-                                    // Other key combinations not handled
-                                }
-                            },
-                            _ => {
-                                // Other events handled
-                            }
+                    TuiEvent::TerminalEvent(event) => {
+                        if self.process_terminal_event(&event, &tx_bg_task) {
+                            break;
                         }
                     }
                 },
@@ -132,5 +113,37 @@ impl Tui {
         let [_, hello_area, instructions_area, _] = layout.areas(frame.area());
         frame.render_widget(hello, hello_area);
         frame.render_widget(instructions, instructions_area);
+    }
+
+    /// Handles crossterm [`Event`]s. Returns `true` if the TUI should quit.
+    ///
+    /// A private helper function that mutates the app's internal state or launches a background
+    /// task by using the given [`Sender`]. Returns a value indicating whether the TUI should quit.
+    /// May use the current app state to determine what action to take in response to the [`Event`].
+    fn process_terminal_event(&mut self, event: &Event, tx_bg_task: &Sender<TaskSpec>) -> bool {
+        match event {
+            Event::Key(key_event) => match key_event.code {
+                KeyCode::Char('q') => {
+                    // Quit
+                    return true;
+                }
+                KeyCode::Char('t') => {
+                    // Launch a new background task
+                    tx_bg_task
+                        .blocking_send(TaskSpec::SleepTest)
+                        .expect("Cannot communicate with background task manager. Thread is dead or channel has been accidentally closed.");
+                    // TODO: Do not use expect. Find a better solution. Print error
+                    // out to TUI
+                }
+                _ => {
+                    // Other key combinations not handled
+                }
+            },
+            _ => {
+                // Other events not handled
+            }
+        }
+
+        return false;
     }
 }
