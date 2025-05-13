@@ -94,6 +94,8 @@ dependencies = [
  "crossterm 0.29.0",
  "futures",
  "ratatui",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

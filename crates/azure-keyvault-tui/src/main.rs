@@ -1,11 +1,11 @@
 use std::io;
 
-use anyhow::Result;
 use tokio::{sync::mpsc, task};
 
 mod background;
 mod input;
 mod tui;
+mod azure_cli_config;
 
 use tui::Tui;
 
@@ -13,7 +13,7 @@ use tui::Tui;
 ///
 /// Launches all threads and tasks necessary for the operation of the TUI.
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> io::Result<()> {
     // TODO: Use Clap to parse arguments and configure the application before launching the TUI.
     let mut app = Tui::default();
 
