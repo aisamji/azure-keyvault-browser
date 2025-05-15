@@ -5,7 +5,7 @@ use tokio::{sync::mpsc, task};
 mod background;
 mod input;
 mod tui;
-mod azure_cli_config;
+mod azure_profile;
 
 use tui::Tui;
 
