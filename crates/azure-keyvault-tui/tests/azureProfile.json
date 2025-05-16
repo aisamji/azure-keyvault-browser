@@ -1,0 +1,17 @@
+{
+    "subscriptions": [
+        {
+            "id": "ddf6c87d-883e-f654-aed3-2842a2dec92e",
+            "name": "dummy-subscription",
+            "state": "Enabled",
+            "user": {
+                "name": "aisamji09@gmail.com",
+                "type": "user"
+            },
+            "isDefault": false,
+            "tenantId": "528f5dcc-318a-11f0-87c5-009337a809da",
+            "environmentName": "AzureCloud"
+        }
+    ],
+    "installationId": "bcb3dcc0-7077-11ef-84dd-009337a809da"
+}
