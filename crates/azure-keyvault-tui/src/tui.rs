@@ -3,13 +3,17 @@ use std::io;
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Constraint, Layout},
+    layout::{Alignment, Constraint, Layout},
     style::Stylize as _,
-    text::{Line, Span},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders},
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::background::TaskSpec;
+use crate::{
+    azure_profile::{AzureProfile, AzureSubscription},
+    background::TaskSpec,
+};
 
 /// Represents different types of events that can occur in the Terminal User Interface (TUI).
 ///
@@ -41,10 +45,26 @@ pub enum TuiEvent {
 /// Contains a `run` function that is used to start the main loop. The fields of this struct should
 /// not be modified by any threads other than the one executing [`Self::run`]. Any modification
 /// requests should be sent to the appropriate [`Sender`] channel.
-#[derive(Default)]
 pub struct Tui {
     /// The number of active background tasks in the application.
     active_tasks: i16,
+    /// The currently selected subscription or None. Defaults to the one from the AZ CLI config.
+    subscription: Option<AzureSubscription>,
+}
+
+impl Default for Tui {
+    fn default() -> Self {
+        let subscriptions = AzureProfile::try_from_config()
+            .ok()
+            .map(|ap| ap.subscriptions);
+        let default_subscription =
+            subscriptions.and_then(|s| s.iter().find(|s| s.is_default).cloned());
+
+        Self {
+            active_tasks: 0,
+            subscription: default_subscription,
+        }
+    }
 }
 
 impl Tui {
@@ -90,50 +110,82 @@ impl Tui {
     ///
     /// A private helper function that should only be called from [`Tui::run`].
     fn render(&self, frame: &mut Frame<'_>) {
-        let hello = Line::from(vec![
-            Span::from("Hello World! I have "),
-            Span::from(self.active_tasks.to_string()).bold().green(),
-            Span::from(" tasks running in the background."),
-        ])
-        .centered();
-        let instructions = Line::from(vec![
-            Span::from("<Q>").blue().bold(),
-            Span::from(" Quit  "),
-            Span::from("<T>").blue().bold(),
-            Span::from(" Launch Background Task"),
-        ])
-        .centered();
-
-        let layout = Layout::vertical([
+        // Define areas/layout
+        let layout = Layout::vertical([Constraint::Length(6), Constraint::Fill(1)]);
+        let [header, body_area] = layout.areas(frame.area());
+        let header_layout = Layout::horizontal([
             Constraint::Fill(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Fill(1),
             Constraint::Fill(1),
         ]);
-        let [_, hello_area, instructions_area, _] = layout.areas(frame.area());
-        frame.render_widget(hello, hello_area);
-        frame.render_widget(instructions, instructions_area);
+        let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
+
+        // Render Metadata
+        let metadata = Text::from(vec![
+            Line::from(vec![
+                Span::from("Subscription: ").bold(),
+                Span::from(
+                    self.subscription
+                        .as_ref()
+                        .map(|s| format!("{} ({})", s.name, s.id))
+                        .unwrap_or("None".to_string()),
+                ),
+            ]),
+            Line::from(vec![
+                Span::from("Resource Group: ").bold(),
+                Span::from("None"),
+            ]),
+            Line::from(vec![Span::from("Key Vault: ").bold(), Span::from("None")]),
+            Line::from(vec![
+                Span::from("AZKV Version: ").bold(),
+                Span::from(env!("CARGO_PKG_VERSION")),
+            ]),
+        ]);
+        frame.render_widget(metadata, metadata_area);
+
+        // Render Instructions
+        let global_keymaps = Text::from(vec![
+            Line::from(vec![
+                Span::from("<S>").bold().cyan(),
+                Span::from(" Subscriptions"),
+            ]),
+            Line::from(vec![
+                Span::from("<K>").bold().cyan(),
+                Span::from(" Key Vaults"),
+            ]),
+            Line::from(vec![Span::from("<k>").bold().cyan(), Span::from(" Keys")]),
+            Line::from(vec![
+                Span::from("<s>").bold().cyan(),
+                Span::from(" Secrets"),
+            ]),
+            Line::from(vec![
+                Span::from("<c>").bold().cyan(),
+                Span::from(" Certificates"),
+            ]),
+            Line::from(vec![Span::from("<q>").bold().cyan(), Span::from(" Quit")]),
+        ]);
+        frame.render_widget(global_keymaps, global_keymaps_area);
+
+        // Render Body
+        let body = Block::new()
+            .borders(Borders::all())
+            .title_alignment(Alignment::Center)
+            .title(Line::from(" Key Vaults ").red());
+
+        frame.render_widget(body, body_area);
     }
 
     /// Handles crossterm [`Event`]s. Returns `true` if the TUI should quit.
     ///
     /// A private helper function that mutates the app's internal state or launches a background
     /// task by using the given [`Sender`]. Returns a value indicating whether the TUI should quit.
-    /// May use the current app state to determine what action to take in response to the [`Event`].
+    /// Blockuse the current app state to determine what action to take in response to the [`Event`].
     fn process_terminal_event(&mut self, event: &Event, tx_bg_task: &Sender<TaskSpec>) -> bool {
         match event {
             Event::Key(key_event) => match key_event.code {
                 KeyCode::Char('q') => {
                     // Quit
                     return true;
-                }
-                KeyCode::Char('t') => {
-                    // Launch a new background task
-                    tx_bg_task
-                        .blocking_send(TaskSpec::SleepTest)
-                        .expect("Cannot communicate with background task manager. Thread is dead or channel has been accidentally closed.");
-                    // TODO: Do not use expect. Find a better solution. Print error
-                    // out to TUI
                 }
                 _ => {
                     // Other key combinations not handled

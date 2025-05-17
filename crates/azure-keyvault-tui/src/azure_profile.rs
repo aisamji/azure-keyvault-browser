@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct AzureProfile {
     pub installation_id: String,
     pub subscriptions: Vec<AzureSubscription>,
@@ -50,6 +51,7 @@ impl AzureProfile {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct AzureSubscription {
     pub id: String,
     pub name: String,
@@ -62,6 +64,7 @@ pub struct AzureSubscription {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[allow(dead_code)]
 pub enum AzureCredential {
     User { name: String },
 }
