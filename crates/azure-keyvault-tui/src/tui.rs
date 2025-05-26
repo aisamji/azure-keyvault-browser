@@ -35,8 +35,6 @@ use crate::{
 pub enum TuiEvent {
     /// Represents an interactive event made by the user.
     TerminalEvent(Event),
-    /// Requests a modification of [`Tui::active_tasks`] by the specified amount.
-    ModifyCount(i16),
     /// Key Vaults have been successfully loaded.
     KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
     /// An error occurred while loading Key Vaults.
@@ -54,8 +52,6 @@ pub enum TuiEvent {
 /// not be modified by any threads other than the one executing [`Self::run`]. Any modification
 /// requests should be sent to the appropriate [`Sender`] channel.
 pub struct Tui {
-    /// The number of active background tasks in the application.
-    active_tasks: i16,
     /// The currently selected subscription or None. Defaults to the one from the AZ CLI config.
     subscription: Option<AzureSubscription>,
     /// Current status message to display to the user.
@@ -71,7 +67,6 @@ impl Default for Tui {
             subscriptions.and_then(|s| s.iter().find(|s| s.is_default).cloned());
 
         Self {
-            active_tasks: 0,
             subscription: default_subscription,
             status_message: None,
         }
@@ -105,9 +100,6 @@ impl Tui {
             terminal.draw(|f| self.render(f))?;
             match rx.blocking_recv() {
                 Some(tui_event) => match tui_event {
-                    TuiEvent::ModifyCount(inc) => {
-                        self.active_tasks += inc;
-                    }
                     TuiEvent::TerminalEvent(event) => {
                         if self.process_terminal_event(&event, &tx_bg_task) {
                             break;
