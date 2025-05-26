@@ -432,6 +432,7 @@ impl Tui {
                                     self.selected_key_vault = Some(key_vault.clone());
                                     self.status_message =
                                         Some(format!("Activated Key Vault: {}", key_vault.name));
+                                    // TODO: Automatically switch to Secrets screen.
                                 }
                             }
                         }
