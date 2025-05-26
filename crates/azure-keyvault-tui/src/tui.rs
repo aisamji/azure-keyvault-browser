@@ -197,7 +197,7 @@ impl Tui {
         let body = Block::new()
             .borders(Borders::all())
             .title_alignment(Alignment::Center)
-            .title(Line::from(" Key Vaults ").red());
+            .title(Line::from(" Key Vaults "));
 
         frame.render_widget(body, body_area);
 
