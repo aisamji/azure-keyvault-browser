@@ -1,0 +1,5 @@
+- Add capability to list and switch between subscriptions
+- Go to KeyVault list view whenever subscription switches (auto-loading the list).
+- Add columns to KeyVault listing (Name, Resource Group)
+- Add tenant ID to metadata at the top
+- Design how I want secrets to be listed (columns, metadata, keymaps, etc.).
