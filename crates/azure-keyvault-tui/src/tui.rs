@@ -61,7 +61,9 @@ pub enum TuiEvent {
 pub struct Tui {
     /// List of all available subscriptions.
     subscriptions: Vec<AzureSubscription>,
-    /// Index of the currently selected subscription.
+    /// Table state for subscriptions selection.
+    subscriptions_table_state: TableState,
+    /// Index of the currently active subscription.
     selected_subscription_index: Option<usize>,
     /// List of loaded key vaults.
     key_vaults: Vec<crate::azure_api::KeyVault>,
@@ -92,6 +94,12 @@ impl Default for Tui {
 
         let selected_subscription_index = subscriptions.iter().position(|s| s.is_default);
 
+        // Initialize subscriptions table state with default selection if available
+        let mut subscriptions_table_state = TableState::default();
+        if let Some(default_index) = selected_subscription_index {
+            subscriptions_table_state.select(Some(default_index));
+        }
+
         let current_screen = if selected_subscription_index.is_some() {
             Screen::KeyVaults
         } else {
@@ -100,6 +108,7 @@ impl Default for Tui {
 
         Self {
             subscriptions,
+            subscriptions_table_state,
             selected_subscription_index,
             key_vaults: Vec::new(),
             key_vaults_table_state: TableState::default(),
@@ -304,21 +313,13 @@ impl Tui {
                 let rows: Vec<Row> = self
                     .subscriptions
                     .iter()
-                    .enumerate()
-                    .map(|(idx, subscription)| {
-                        let style = if Some(idx) == self.selected_subscription_index {
-                            Style::default().bg(Color::Blue)
-                        } else {
-                            Style::default()
-                        };
-
+                    .map(|subscription| {
                         Row::new(vec![
                             Cell::from(subscription.name.clone()),
                             Cell::from(subscription.id.clone()),
                             Cell::from(subscription.tenant_id.clone()),
                             Cell::from(subscription.user.to_string()),
                         ])
-                        .style(style)
                     })
                     .collect();
 
@@ -337,9 +338,10 @@ impl Tui {
                         .borders(Borders::all())
                         .title_alignment(Alignment::Center)
                         .title(Line::from(" Subscriptions ")),
-                );
+                )
+                .row_highlight_style(Style::default().bg(Color::Blue));
 
-                frame.render_widget(table, body_area);
+                frame.render_stateful_widget(table, body_area, &mut self.subscriptions_table_state);
             }
         }
 
@@ -395,22 +397,63 @@ impl Tui {
                     }
                 }
                 KeyCode::Up => {
-                    if self.current_screen == Screen::KeyVaults && !self.key_vaults.is_empty() {
-                        self.key_vaults_table_state.select_previous();
+                    match self.current_screen {
+                        Screen::KeyVaults => {
+                            if !self.key_vaults.is_empty() {
+                                self.key_vaults_table_state.select_previous();
+                            }
+                        }
+                        Screen::Subscriptions => {
+                            if !self.subscriptions.is_empty() {
+                                self.subscriptions_table_state.select_previous();
+                            }
+                        }
                     }
                 }
                 KeyCode::Down => {
-                    if self.current_screen == Screen::KeyVaults && !self.key_vaults.is_empty() {
-                        self.key_vaults_table_state.select_next();
+                    match self.current_screen {
+                        Screen::KeyVaults => {
+                            if !self.key_vaults.is_empty() {
+                                self.key_vaults_table_state.select_next();
+                            }
+                        }
+                        Screen::Subscriptions => {
+                            if !self.subscriptions.is_empty() {
+                                self.subscriptions_table_state.select_next();
+                            }
+                        }
                     }
                 }
                 KeyCode::Enter => {
-                    if self.current_screen == Screen::KeyVaults {
-                        if let Some(selected_index) = self.key_vaults_table_state.selected() {
-                            if let Some(key_vault) = self.key_vaults.get(selected_index) {
-                                self.selected_key_vault = Some(key_vault.clone());
-                                self.status_message =
-                                    Some(format!("Activated Key Vault: {}", key_vault.name));
+                    match self.current_screen {
+                        Screen::KeyVaults => {
+                            if let Some(selected_index) = self.key_vaults_table_state.selected() {
+                                if let Some(key_vault) = self.key_vaults.get(selected_index) {
+                                    self.selected_key_vault = Some(key_vault.clone());
+                                    self.status_message =
+                                        Some(format!("Activated Key Vault: {}", key_vault.name));
+                                }
+                            }
+                        }
+                        Screen::Subscriptions => {
+                            if let Some(selected_index) = self.subscriptions_table_state.selected() {
+                                if let Some(subscription) = self.subscriptions.get(selected_index) {
+                                    // Clear selected key vault when switching subscriptions
+                                    self.selected_key_vault = None;
+                                    self.key_vaults_table_state = TableState::default();
+                                    
+                                    // Update the active subscription
+                                    self.selected_subscription_index = Some(selected_index);
+                                    
+                                    // Switch to key vaults screen
+                                    self.current_screen = Screen::KeyVaults;
+                                    self.status_message = None;
+                                    
+                                    // Trigger key vault loading for the new subscription
+                                    let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+                                        subscription_id: subscription.id.clone(),
+                                    });
+                                }
                             }
                         }
                     }
