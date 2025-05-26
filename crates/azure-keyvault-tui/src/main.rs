@@ -2,10 +2,11 @@ use std::io;
 
 use tokio::{sync::mpsc, task};
 
+mod azure_api;
+mod azure_profile;
 mod background;
 mod input;
 mod tui;
-mod azure_profile;
 
 use tui::Tui;
 

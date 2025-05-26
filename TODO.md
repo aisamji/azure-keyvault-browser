@@ -1,0 +1,6 @@
+- Design how I want secrets to be listed (columns, metadata, keymaps, etc.).
+- Figure out secret displays
+- Figure out editing mechanics for secrets.
+- Update subscription list to only show "Enabled" subscriptions.
+- Design how I want certificates to be listed (columns, metadata, keymaps, etc.).
+- Design how I want keys to be listed (columns, metadata, keymaps, etc.).

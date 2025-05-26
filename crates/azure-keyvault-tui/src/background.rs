@@ -1,4 +1,3 @@
-use std::time::Duration;
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -9,8 +8,8 @@ use crate::tui::TuiEvent;
 /// Each [`TaskSpec`] contains the necessary parameters and other information to be able to call
 /// the function associated with the specified background task.
 pub enum TaskSpec {
-    /// A dummy task that sleeps for a 5 seconds.
-    SleepTest,
+    /// Lists Key Vaults for the given subscription ID.
+    ListKeyVaults { subscription_id: String },
 }
 
 /// Launches requested tasks in the background and waits for tasks to finish before exiting.
@@ -26,29 +25,45 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
         // of them.
         // TODO: There might be a better way to keep track of them.
         let handle = match task_spec {
-            TaskSpec::SleepTest => tokio::task::spawn(sleep_test(tx_tui_event.clone())),
+            TaskSpec::ListKeyVaults { subscription_id } => {
+                tokio::task::spawn(list_key_vaults(tx_tui_event.clone(), subscription_id))
+            }
         };
         spawned_tasks.push(handle);
     }
 
     // Wait for all background tasks to finish.
     for handle in spawned_tasks {
-        let _ = handle.await.inspect_err(|e| eprintln!("{:?}", e));
+        let _ = handle.await.inspect_err(|e| {
+            // Only use eprintln when TUI is shutting down
+            eprintln!("Background task error during shutdown: {:?}", e);
+        });
     }
 }
 
-/// A dummy function that sleeps for 5 seconds. Sends state modification requests before and after sleeping.
-async fn sleep_test(tx: Sender<TuiEvent>) {
-    match tx.send(TuiEvent::ModifyCount(1)).await {
-        Ok(_) => {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            if tx.send(TuiEvent::ModifyCount(-1)).await.is_err() {
-                // TUI thread is dead now. Send the log message to stderr.
-                eprintln!("Task completed.");
-            }
+/// Lists Key Vaults for the given subscription and sends the result to the TUI.
+async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) -> Result<(), tokio::sync::mpsc::error::SendError<TuiEvent>> {
+    // Show loading status
+    tx.send(TuiEvent::SetStatusMessage("Loading Key Vaults...".to_string())).await?;
+
+    // Get access token for the subscription
+    let access_token = match crate::azure_api::get_access_token_for_subscription(&subscription_id).await {
+        Ok(token) => token,
+        Err(e) => {
+            tx.send(TuiEvent::SetStatusMessage(format!("Failed to get access token: {}", e))).await?;
+            return Ok(());
         }
-        Err(_) => {
-            // TUI is dead before we could even start. Skip doing anything.
+    };
+
+    // List key vaults using the token
+    match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {
+        Ok(key_vaults) => {
+            tx.send(TuiEvent::KeyVaultsLoaded(key_vaults)).await?;
+        }
+        Err(e) => {
+            tx.send(TuiEvent::SetStatusMessage(format!("Failed to load Key Vaults: {}", e))).await?;
         }
     }
+
+    Ok(())
 }
