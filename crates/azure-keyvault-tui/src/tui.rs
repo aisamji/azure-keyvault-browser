@@ -87,6 +87,13 @@ impl Tui {
         mut rx: Receiver<TuiEvent>,
         tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
+        // Trigger initial Key Vault listing if we have a default subscription
+        if let Some(ref subscription) = self.subscription {
+            let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+                subscription_id: subscription.id.clone(),
+            });
+        }
+
         loop {
             terminal.draw(|f| self.render(f))?;
             match rx.blocking_recv() {

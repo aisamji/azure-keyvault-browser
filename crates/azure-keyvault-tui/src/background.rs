@@ -1,7 +1,7 @@
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::{azure_api::KeyVault, tui::TuiEvent};
+use crate::tui::TuiEvent;
 
 /// Represents different types of background tasks that can be launched.
 ///
@@ -9,7 +9,7 @@ use crate::{azure_api::KeyVault, tui::TuiEvent};
 /// the function associated with the specified background task.
 pub enum TaskSpec {
     /// Lists Key Vaults for the given subscription ID.
-    ListKeyVaults { subscription_id: String, access_token: String },
+    ListKeyVaults { subscription_id: String },
 }
 
 /// Launches requested tasks in the background and waits for tasks to finish before exiting.
@@ -25,8 +25,8 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
         // of them.
         // TODO: There might be a better way to keep track of them.
         let handle = match task_spec {
-            TaskSpec::ListKeyVaults { subscription_id, access_token } => {
-                tokio::task::spawn(list_key_vaults(tx_tui_event.clone(), subscription_id, access_token))
+            TaskSpec::ListKeyVaults { subscription_id } => {
+                tokio::task::spawn(list_key_vaults(tx_tui_event.clone(), subscription_id))
             }
         };
         spawned_tasks.push(handle);
@@ -39,7 +39,17 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 }
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
-async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String, access_token: String) {
+async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) {
+    // Get access token for the subscription
+    let access_token = match crate::azure_api::get_access_token_for_subscription(&subscription_id).await {
+        Ok(token) => token,
+        Err(e) => {
+            let _ = tx.send(TuiEvent::KeyVaultsLoadError(format!("Failed to get access token: {}", e))).await;
+            return;
+        }
+    };
+
+    // List key vaults using the token
     match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {
         Ok(key_vaults) => {
             let _ = tx.send(TuiEvent::KeyVaultsLoaded(key_vaults)).await;

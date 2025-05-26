@@ -1,4 +1,6 @@
 use anyhow::{Result, anyhow};
+use azure_core::credentials::TokenCredential;
+use azure_identity::{AzureCliCredential, AzureCliCredentialOptions};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -58,3 +60,16 @@ pub async fn list_key_vaults(subscription_id: &str, access_token: &str) -> Resul
     let list_response: KeyVaultListResponse = response.json().await?;
     Ok(list_response.value)
 }
+
+pub async fn get_access_token_for_subscription(subscription_id: &str) -> Result<String> {
+    let credential = AzureCliCredential::new(Some(AzureCliCredentialOptions {
+        subscription: Some(subscription_id.to_string()),
+        ..Default::default()
+    }))?;
+    let scopes = ["https://management.azure.com/.default"];
+
+    let token_response = credential.get_token(&scopes).await?;
+
+    Ok(token_response.token.secret().to_string())
+}
+
