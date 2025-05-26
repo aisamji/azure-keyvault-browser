@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{fmt::Display, path::PathBuf, process::Command, str::FromStr};
 
 use anyhow::{Result, anyhow};
 use dirs::home_dir;
@@ -47,6 +47,34 @@ impl AzureProfile {
 
         Ok(serde_json::from_str(raw_json.as_str())?)
     }
+
+    /// Gets the Azure CLI version.
+    ///
+    /// Returns an error if Azure CLI is not installed or not accessible.
+    pub fn get_azure_cli_version() -> Result<String> {
+        let output = Command::new("az")
+            .arg("version")
+            .arg("--output")
+            .arg("json")
+            .output()
+            .map_err(|e| anyhow!("Failed to execute 'az version --output json'. Please ensure Azure CLI is installed and accessible in PATH. Error: {}", e))?;
+
+        if !output.status.success() {
+            return Err(anyhow!("Azure CLI command failed. Please ensure Azure CLI is properly installed."));
+        }
+
+        let version_output = String::from_utf8(output.stdout)
+            .map_err(|e| anyhow!("Failed to parse Azure CLI version output: {}", e))?;
+
+        let version_info: serde_json::Value = serde_json::from_str(&version_output)
+            .map_err(|e| anyhow!("Failed to parse Azure CLI version JSON: {}", e))?;
+
+        let version = version_info["azure-cli"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Could not find 'azure-cli' version in response"))?;
+
+        Ok(version.to_string())
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -65,6 +93,14 @@ pub struct AzureSubscription {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AzureCredential {
     User { name: String },
+}
+
+impl Display for AzureCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AzureCredential::User { name } => write!(f, "User ({})", name),
+        }
+    }
 }
 
 #[cfg(test)]

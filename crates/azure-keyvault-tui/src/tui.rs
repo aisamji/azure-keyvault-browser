@@ -1,12 +1,12 @@
 use std::io;
 
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Alignment, Constraint, Layout},
     style::{Color, Style, Stylize as _},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -14,6 +14,15 @@ use crate::{
     azure_profile::{AzureProfile, AzureSubscription},
     background::TaskSpec,
 };
+
+/// Represents the different screens/views available in the TUI.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Screen {
+    /// Main screen showing key vaults for the selected subscription.
+    KeyVaults,
+    /// Screen showing the list of available subscriptions.
+    Subscriptions,
+}
 
 /// Represents different types of events that can occur in the Terminal User Interface (TUI).
 ///
@@ -50,22 +59,47 @@ pub enum TuiEvent {
 /// not be modified by any threads other than the one executing [`Self::run`]. Any modification
 /// requests should be sent to the appropriate [`Sender`] channel.
 pub struct Tui {
-    /// The currently selected subscription or None. Defaults to the one from the AZ CLI config.
-    subscription: Option<AzureSubscription>,
+    /// List of all available subscriptions.
+    subscriptions: Vec<AzureSubscription>,
+    /// Index of the currently selected subscription.
+    selected_subscription_index: Option<usize>,
+    /// The current screen being displayed.
+    current_screen: Screen,
+    /// Azure CLI version.
+    azure_cli_version: String,
     /// Current status message to display to the user.
     status_message: Option<String>,
 }
 
 impl Default for Tui {
     fn default() -> Self {
+        // Get Azure CLI version first, crash if not available
+        let azure_cli_version = AzureProfile::get_azure_cli_version()
+            .unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            });
+
         let subscriptions = AzureProfile::try_from_config()
             .ok()
-            .map(|ap| ap.subscriptions);
-        let default_subscription =
-            subscriptions.and_then(|s| s.iter().find(|s| s.is_default).cloned());
+            .map(|ap| ap.subscriptions)
+            .unwrap_or_default();
+        
+        let selected_subscription_index = subscriptions
+            .iter()
+            .position(|s| s.is_default);
+
+        let current_screen = if selected_subscription_index.is_some() {
+            Screen::KeyVaults
+        } else {
+            Screen::Subscriptions
+        };
 
         Self {
-            subscription: default_subscription,
+            subscriptions,
+            selected_subscription_index,
+            current_screen,
+            azure_cli_version,
             status_message: None,
         }
     }
@@ -88,7 +122,8 @@ impl Tui {
         tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
         // Trigger initial Key Vault listing if we have a default subscription
-        if let Some(ref subscription) = self.subscription {
+        if let Some(subscription) = self.selected_subscription_index
+            .and_then(|idx| self.subscriptions.get(idx)) {
             let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                 subscription_id: subscription.id.clone(),
             });
@@ -143,12 +178,14 @@ impl Tui {
         let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
+        let current_subscription = self.selected_subscription_index
+            .and_then(|idx| self.subscriptions.get(idx));
+        
         let metadata = Text::from(vec![
             Line::from(vec![
                 Span::from("Subscription: ").bold(),
                 Span::from(
-                    self.subscription
-                        .as_ref()
+                    current_subscription
                         .map(|s| format!("{} ({})", s.name, s.id))
                         .unwrap_or("None".to_string()),
                 ),
@@ -157,10 +194,22 @@ impl Tui {
                 Span::from("Resource Group: ").bold(),
                 Span::from("None"),
             ]),
+            Line::from(vec![
+                Span::from("Tenant ID: ").bold(),
+                Span::from(
+                    current_subscription
+                        .map(|s| s.tenant_id.as_str())
+                        .unwrap_or("None"),
+                ),
+            ]),
             Line::from(vec![Span::from("Key Vault: ").bold(), Span::from("None")]),
             Line::from(vec![
                 Span::from("AZKV Version: ").bold(),
                 Span::from(env!("CARGO_PKG_VERSION")),
+            ]),
+            Line::from(vec![
+                Span::from("Azure CLI: ").bold(),
+                Span::from(&self.azure_cli_version),
             ]),
         ]);
         frame.render_widget(metadata, metadata_area);
@@ -188,13 +237,60 @@ impl Tui {
         ]);
         frame.render_widget(global_keymaps, global_keymaps_area);
 
-        // Render Body
-        let body = Block::new()
-            .borders(Borders::all())
-            .title_alignment(Alignment::Center)
-            .title(Line::from(" Key Vaults "));
+        // Render Body based on current screen
+        match self.current_screen {
+            Screen::KeyVaults => {
+                let body = Block::new()
+                    .borders(Borders::all())
+                    .title_alignment(Alignment::Center)
+                    .title(Line::from(" Key Vaults "));
 
-        frame.render_widget(body, body_area);
+                frame.render_widget(body, body_area);
+            }
+            Screen::Subscriptions => {
+                let header = Row::new(vec![
+                    Cell::from("Name").style(Style::default().bold()),
+                    Cell::from("ID").style(Style::default().bold()),
+                    Cell::from("Tenant ID").style(Style::default().bold()),
+                    Cell::from("Auth").style(Style::default().bold()),
+                ]);
+
+                let rows: Vec<Row> = self.subscriptions
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, subscription)| {
+                        let style = if Some(idx) == self.selected_subscription_index {
+                            Style::default().bg(Color::Blue)
+                        } else {
+                            Style::default()
+                        };
+                        
+                        Row::new(vec![
+                            Cell::from(subscription.name.clone()),
+                            Cell::from(subscription.id.clone()),
+                            Cell::from(subscription.tenant_id.clone()),
+                            Cell::from(subscription.user.to_string()),
+                        ]).style(style)
+                    })
+                    .collect();
+
+                let table = Table::new(rows, [
+                    Constraint::Fill(2),
+                    Constraint::Fill(3),
+                    Constraint::Fill(3),
+                    Constraint::Fill(2),
+                ])
+                .header(header)
+                .block(
+                    Block::new()
+                        .borders(Borders::all())
+                        .title_alignment(Alignment::Center)
+                        .title(Line::from(" Subscriptions "))
+                );
+
+                frame.render_widget(table, body_area);
+            }
+        }
 
         // Render Status Bar
         let status_text = self.status_message
@@ -223,6 +319,10 @@ impl Tui {
                 KeyCode::Char('q') => {
                     // Quit
                     return true;
+                }
+                KeyCode::Char('S') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
+                    // Switch to subscriptions screen
+                    self.current_screen = Screen::Subscriptions;
                 }
                 _ => {
                     // Other key combinations not handled
