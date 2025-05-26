@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout},
     style::{Color, Style, Stylize as _},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -65,8 +65,10 @@ pub struct Tui {
     selected_subscription_index: Option<usize>,
     /// List of loaded key vaults.
     key_vaults: Vec<crate::azure_api::KeyVault>,
-    /// Index of the currently selected key vault.
-    selected_key_vault_index: Option<usize>,
+    /// Table state for key vaults selection.
+    key_vaults_table_state: TableState,
+    /// The currently activated key vault.
+    selected_key_vault: Option<crate::azure_api::KeyVault>,
     /// The current screen being displayed.
     current_screen: Screen,
     /// Azure CLI version.
@@ -78,20 +80,17 @@ pub struct Tui {
 impl Default for Tui {
     fn default() -> Self {
         // Get Azure CLI version first, crash if not available
-        let azure_cli_version = AzureProfile::get_azure_cli_version()
-            .unwrap_or_else(|e| {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            });
+        let azure_cli_version = AzureProfile::get_azure_cli_version().unwrap_or_else(|e| {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        });
 
         let subscriptions = AzureProfile::try_from_config()
             .ok()
             .map(|ap| ap.subscriptions)
             .unwrap_or_default();
-        
-        let selected_subscription_index = subscriptions
-            .iter()
-            .position(|s| s.is_default);
+
+        let selected_subscription_index = subscriptions.iter().position(|s| s.is_default);
 
         let current_screen = if selected_subscription_index.is_some() {
             Screen::KeyVaults
@@ -103,7 +102,8 @@ impl Default for Tui {
             subscriptions,
             selected_subscription_index,
             key_vaults: Vec::new(),
-            selected_key_vault_index: None,
+            key_vaults_table_state: TableState::default(),
+            selected_key_vault: None,
             current_screen,
             azure_cli_version,
             status_message: None,
@@ -128,15 +128,19 @@ impl Tui {
         tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
         // Trigger initial Key Vault listing if we have a default subscription
-        if let Some(subscription) = self.selected_subscription_index
-            .and_then(|idx| self.subscriptions.get(idx)) {
+        if let Some(subscription) = self
+            .selected_subscription_index
+            .and_then(|idx| self.subscriptions.get(idx))
+        {
             let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                 subscription_id: subscription.id.clone(),
             });
         }
 
         loop {
-            terminal.draw(|f| self.render(f))?;
+            terminal.draw(|f| {
+                self.render(f);
+            })?;
             match rx.blocking_recv() {
                 Some(tui_event) => match tui_event {
                     TuiEvent::TerminalEvent(event) => {
@@ -146,8 +150,8 @@ impl Tui {
                     }
                     TuiEvent::KeyVaultsLoaded(key_vaults) => {
                         self.key_vaults = key_vaults;
-                        self.selected_key_vault_index = None; // Clear selection when new data loads
-                        self.status_message = Some(format!("Loaded {} key vaults", self.key_vaults.len()));
+                        self.status_message =
+                            Some(format!("Loaded {} key vaults", self.key_vaults.len()));
                     }
                     TuiEvent::SetStatusMessage(message) => {
                         self.status_message = Some(message);
@@ -169,25 +173,26 @@ impl Tui {
     /// Renders [`ratatui::widgets::Widget`]s on the specified [`Frame`].
     ///
     /// A private helper function that should only be called from [`Tui::run`].
-    fn render(&self, frame: &mut Frame<'_>) {
+    fn render(&mut self, frame: &mut Frame<'_>) {
         // Define areas/layout
         let layout = Layout::vertical([
-            Constraint::Length(6), 
-            Constraint::Fill(1), 
-            Constraint::Length(2)
+            Constraint::Length(6),
+            Constraint::Fill(1),
+            Constraint::Length(2),
         ]);
         let [header, body_area, status_area] = layout.areas(frame.area());
         let header_layout = Layout::horizontal([
-            Constraint::Fill(1),
+            Constraint::Fill(2),
             Constraint::Fill(1),
             Constraint::Fill(1),
         ]);
         let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
-        let current_subscription = self.selected_subscription_index
+        let current_subscription = self
+            .selected_subscription_index
             .and_then(|idx| self.subscriptions.get(idx));
-        
+
         let metadata = Text::from(vec![
             Line::from(vec![
                 Span::from("Subscription: ").bold(),
@@ -199,7 +204,12 @@ impl Tui {
             ]),
             Line::from(vec![
                 Span::from("Resource Group: ").bold(),
-                Span::from("None"),
+                Span::from(
+                    self.selected_key_vault
+                        .as_ref()
+                        .map(|kv| kv.resource_group())
+                        .unwrap_or("None"),
+                ),
             ]),
             Line::from(vec![
                 Span::from("Tenant ID: ").bold(),
@@ -209,7 +219,15 @@ impl Tui {
                         .unwrap_or("None"),
                 ),
             ]),
-            Line::from(vec![Span::from("Key Vault: ").bold(), Span::from("None")]),
+            Line::from(vec![
+                Span::from("Key Vault: ").bold(),
+                Span::from(
+                    self.selected_key_vault
+                        .as_ref()
+                        .map(|kv| kv.name.as_str())
+                        .unwrap_or("None"),
+                ),
+            ]),
             Line::from(vec![
                 Span::from("AZKV Version: ").bold(),
                 Span::from(env!("CARGO_PKG_VERSION")),
@@ -252,45 +270,28 @@ impl Tui {
                     Cell::from("Resource Group").style(Style::default().bold()),
                 ]);
 
-                let rows: Vec<Row> = self.key_vaults
+                let rows: Vec<Row> = self
+                    .key_vaults
                     .iter()
-                    .enumerate()
-                    .map(|(idx, key_vault)| {
-                        // Extract resource group from the resource ID
-                        // Format: /subscriptions/{subscription}/resourceGroups/{resourceGroup}/providers/Microsoft.KeyVault/vaults/{name}
-                        let resource_group = key_vault.id
-                            .split('/')
-                            .collect::<Vec<&str>>()
-                            .get(4)
-                            .unwrap_or(&"Unknown")
-                            .to_string();
-                        
-                        let style = if Some(idx) == self.selected_key_vault_index {
-                            Style::default().bg(Color::Blue)
-                        } else {
-                            Style::default()
-                        };
-                        
+                    .map(|key_vault| {
                         Row::new(vec![
                             Cell::from(key_vault.name.clone()),
-                            Cell::from(resource_group),
-                        ]).style(style)
+                            Cell::from(key_vault.resource_group()),
+                        ])
                     })
                     .collect();
 
-                let table = Table::new(rows, [
-                    Constraint::Fill(1),
-                    Constraint::Fill(1),
-                ])
-                .header(header)
-                .block(
-                    Block::new()
-                        .borders(Borders::all())
-                        .title_alignment(Alignment::Center)
-                        .title(Line::from(" Key Vaults "))
-                );
+                let table = Table::new(rows, [Constraint::Fill(1), Constraint::Fill(1)])
+                    .header(header)
+                    .block(
+                        Block::new()
+                            .borders(Borders::all())
+                            .title_alignment(Alignment::Center)
+                            .title(Line::from(" Key Vaults ")),
+                    )
+                    .row_highlight_style(Style::default().bg(Color::Blue));
 
-                frame.render_widget(table, body_area);
+                frame.render_stateful_widget(table, body_area, &mut self.key_vaults_table_state);
             }
             Screen::Subscriptions => {
                 let header = Row::new(vec![
@@ -300,7 +301,8 @@ impl Tui {
                     Cell::from("Auth").style(Style::default().bold()),
                 ]);
 
-                let rows: Vec<Row> = self.subscriptions
+                let rows: Vec<Row> = self
+                    .subscriptions
                     .iter()
                     .enumerate()
                     .map(|(idx, subscription)| {
@@ -309,28 +311,32 @@ impl Tui {
                         } else {
                             Style::default()
                         };
-                        
+
                         Row::new(vec![
                             Cell::from(subscription.name.clone()),
                             Cell::from(subscription.id.clone()),
                             Cell::from(subscription.tenant_id.clone()),
                             Cell::from(subscription.user.to_string()),
-                        ]).style(style)
+                        ])
+                        .style(style)
                     })
                     .collect();
 
-                let table = Table::new(rows, [
-                    Constraint::Fill(2),
-                    Constraint::Fill(3),
-                    Constraint::Fill(3),
-                    Constraint::Fill(2),
-                ])
+                let table = Table::new(
+                    rows,
+                    [
+                        Constraint::Fill(2),
+                        Constraint::Fill(3),
+                        Constraint::Fill(3),
+                        Constraint::Fill(2),
+                    ],
+                )
                 .header(header)
                 .block(
                     Block::new()
                         .borders(Borders::all())
                         .title_alignment(Alignment::Center)
-                        .title(Line::from(" Subscriptions "))
+                        .title(Line::from(" Subscriptions ")),
                 );
 
                 frame.render_widget(table, body_area);
@@ -372,15 +378,41 @@ impl Tui {
                     // Switch to key vaults screen
                     self.current_screen = Screen::KeyVaults;
                     self.status_message = None;
-                    
+
                     // Trigger key vault loading if we have a selected subscription
-                    if let Some(subscription) = self.selected_subscription_index
-                        .and_then(|idx| self.subscriptions.get(idx)) {
+                    if let Some(subscription) = self
+                        .selected_subscription_index
+                        .and_then(|idx| self.subscriptions.get(idx))
+                    {
                         let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                             subscription_id: subscription.id.clone(),
                         });
                     } else {
-                        self.status_message = Some("No subscription selected. Please select a subscription first.".to_string());
+                        self.status_message = Some(
+                            "No subscription selected. Please select a subscription first."
+                                .to_string(),
+                        );
+                    }
+                }
+                KeyCode::Up => {
+                    if self.current_screen == Screen::KeyVaults && !self.key_vaults.is_empty() {
+                        self.key_vaults_table_state.select_previous();
+                    }
+                }
+                KeyCode::Down => {
+                    if self.current_screen == Screen::KeyVaults && !self.key_vaults.is_empty() {
+                        self.key_vaults_table_state.select_next();
+                    }
+                }
+                KeyCode::Enter => {
+                    if self.current_screen == Screen::KeyVaults {
+                        if let Some(selected_index) = self.key_vaults_table_state.selected() {
+                            if let Some(key_vault) = self.key_vaults.get(selected_index) {
+                                self.selected_key_vault = Some(key_vault.clone());
+                                self.status_message =
+                                    Some(format!("Activated Key Vault: {}", key_vault.name));
+                            }
+                        }
                     }
                 }
                 _ => {

@@ -14,6 +14,20 @@ pub struct KeyVault {
     pub properties: KeyVaultProperties,
 }
 
+impl KeyVault {
+    /// Extracts the resource group name from the Azure resource ID.
+    ///
+    /// Azure resource IDs follow the format:
+    /// `/subscriptions/{subscription}/resourceGroups/{resourceGroup}/providers/Microsoft.KeyVault/vaults/{name}`
+    pub fn resource_group(&self) -> &str {
+        self.id
+            .split('/')
+            .collect::<Vec<&str>>()
+            .get(4)
+            .unwrap_or(&"Unknown")
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyVaultProperties {
