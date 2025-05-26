@@ -37,6 +37,10 @@ pub enum TuiEvent {
     TerminalEvent(Event),
     /// Requests a modification of [`Tui::active_tasks`] by the specified amount.
     ModifyCount(i16),
+    /// Key Vaults have been successfully loaded.
+    KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
+    /// An error occurred while loading Key Vaults.
+    KeyVaultsLoadError(String),
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -94,6 +98,13 @@ impl Tui {
                         if self.process_terminal_event(&event, &tx_bg_task) {
                             break;
                         }
+                    }
+                    TuiEvent::KeyVaultsLoaded(key_vaults) => {
+                        // TODO: Update UI to display the loaded key vaults
+                        eprintln!("Loaded {} key vaults", key_vaults.len());
+                    }
+                    TuiEvent::KeyVaultsLoadError(error) => {
+                        eprintln!("Error loading key vaults: {}", error);
                     }
                 },
                 // If all senders of TuiEvents have somehow been closed, we should kill this thread as well.

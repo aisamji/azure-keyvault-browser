@@ -1,16 +1,15 @@
-use std::time::Duration;
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::tui::TuiEvent;
+use crate::{azure_api::KeyVault, tui::TuiEvent};
 
 /// Represents different types of background tasks that can be launched.
 ///
 /// Each [`TaskSpec`] contains the necessary parameters and other information to be able to call
 /// the function associated with the specified background task.
 pub enum TaskSpec {
-    /// A dummy task that sleeps for a 5 seconds.
-    SleepTest,
+    /// Lists Key Vaults for the given subscription ID.
+    ListKeyVaults { subscription_id: String, access_token: String },
 }
 
 /// Launches requested tasks in the background and waits for tasks to finish before exiting.
@@ -26,7 +25,9 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
         // of them.
         // TODO: There might be a better way to keep track of them.
         let handle = match task_spec {
-            TaskSpec::SleepTest => tokio::task::spawn(sleep_test(tx_tui_event.clone())),
+            TaskSpec::ListKeyVaults { subscription_id, access_token } => {
+                tokio::task::spawn(list_key_vaults(tx_tui_event.clone(), subscription_id, access_token))
+            }
         };
         spawned_tasks.push(handle);
     }
@@ -37,18 +38,14 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
     }
 }
 
-/// A dummy function that sleeps for 5 seconds. Sends state modification requests before and after sleeping.
-async fn sleep_test(tx: Sender<TuiEvent>) {
-    match tx.send(TuiEvent::ModifyCount(1)).await {
-        Ok(_) => {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            if tx.send(TuiEvent::ModifyCount(-1)).await.is_err() {
-                // TUI thread is dead now. Send the log message to stderr.
-                eprintln!("Task completed.");
-            }
+/// Lists Key Vaults for the given subscription and sends the result to the TUI.
+async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String, access_token: String) {
+    match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {
+        Ok(key_vaults) => {
+            let _ = tx.send(TuiEvent::KeyVaultsLoaded(key_vaults)).await;
         }
-        Err(_) => {
-            // TUI is dead before we could even start. Skip doing anything.
+        Err(e) => {
+            let _ = tx.send(TuiEvent::KeyVaultsLoadError(e.to_string())).await;
         }
     }
 }
