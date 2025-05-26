@@ -42,26 +42,28 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 }
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
-async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) {
+async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) -> Result<(), tokio::sync::mpsc::error::SendError<TuiEvent>> {
     // Show loading status
-    let _ = tx.send(TuiEvent::SetStatusMessage("Loading Key Vaults...".to_string())).await;
+    tx.send(TuiEvent::SetStatusMessage("Loading Key Vaults...".to_string())).await?;
 
     // Get access token for the subscription
     let access_token = match crate::azure_api::get_access_token_for_subscription(&subscription_id).await {
         Ok(token) => token,
         Err(e) => {
-            let _ = tx.send(TuiEvent::KeyVaultsLoadError(format!("Failed to get access token: {}", e))).await;
-            return;
+            tx.send(TuiEvent::SetStatusMessage(format!("Failed to get access token: {}", e))).await?;
+            return Ok(());
         }
     };
 
     // List key vaults using the token
     match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {
         Ok(key_vaults) => {
-            let _ = tx.send(TuiEvent::KeyVaultsLoaded(key_vaults)).await;
+            tx.send(TuiEvent::KeyVaultsLoaded(key_vaults)).await?;
         }
         Err(e) => {
-            let _ = tx.send(TuiEvent::KeyVaultsLoadError(e.to_string())).await;
+            tx.send(TuiEvent::SetStatusMessage(format!("Failed to load Key Vaults: {}", e))).await?;
         }
     }
+
+    Ok(())
 }

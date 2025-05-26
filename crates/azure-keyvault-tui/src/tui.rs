@@ -37,8 +37,6 @@ pub enum TuiEvent {
     TerminalEvent(Event),
     /// Key Vaults have been successfully loaded.
     KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
-    /// An error occurred while loading Key Vaults.
-    KeyVaultsLoadError(String),
     /// Sets the status message to display to the user.
     SetStatusMessage(String),
     /// Clears the current status message.
@@ -108,9 +106,6 @@ impl Tui {
                     TuiEvent::KeyVaultsLoaded(key_vaults) => {
                         // TODO: Update UI to display the loaded key vaults
                         self.status_message = Some(format!("Loaded {} key vaults", key_vaults.len()));
-                    }
-                    TuiEvent::KeyVaultsLoadError(error) => {
-                        self.status_message = Some(format!("Error loading key vaults: {}", error));
                     }
                     TuiEvent::SetStatusMessage(message) => {
                         self.status_message = Some(message);
