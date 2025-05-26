@@ -63,6 +63,10 @@ pub struct Tui {
     subscriptions: Vec<AzureSubscription>,
     /// Index of the currently selected subscription.
     selected_subscription_index: Option<usize>,
+    /// List of loaded key vaults.
+    key_vaults: Vec<crate::azure_api::KeyVault>,
+    /// Index of the currently selected key vault.
+    selected_key_vault_index: Option<usize>,
     /// The current screen being displayed.
     current_screen: Screen,
     /// Azure CLI version.
@@ -98,6 +102,8 @@ impl Default for Tui {
         Self {
             subscriptions,
             selected_subscription_index,
+            key_vaults: Vec::new(),
+            selected_key_vault_index: None,
             current_screen,
             azure_cli_version,
             status_message: None,
@@ -139,8 +145,9 @@ impl Tui {
                         }
                     }
                     TuiEvent::KeyVaultsLoaded(key_vaults) => {
-                        // TODO: Update UI to display the loaded key vaults
-                        self.status_message = Some(format!("Loaded {} key vaults", key_vaults.len()));
+                        self.key_vaults = key_vaults;
+                        self.selected_key_vault_index = None; // Clear selection when new data loads
+                        self.status_message = Some(format!("Loaded {} key vaults", self.key_vaults.len()));
                     }
                     TuiEvent::SetStatusMessage(message) => {
                         self.status_message = Some(message);
@@ -240,12 +247,50 @@ impl Tui {
         // Render Body based on current screen
         match self.current_screen {
             Screen::KeyVaults => {
-                let body = Block::new()
-                    .borders(Borders::all())
-                    .title_alignment(Alignment::Center)
-                    .title(Line::from(" Key Vaults "));
+                let header = Row::new(vec![
+                    Cell::from("Name").style(Style::default().bold()),
+                    Cell::from("Resource Group").style(Style::default().bold()),
+                ]);
 
-                frame.render_widget(body, body_area);
+                let rows: Vec<Row> = self.key_vaults
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, key_vault)| {
+                        // Extract resource group from the resource ID
+                        // Format: /subscriptions/{subscription}/resourceGroups/{resourceGroup}/providers/Microsoft.KeyVault/vaults/{name}
+                        let resource_group = key_vault.id
+                            .split('/')
+                            .collect::<Vec<&str>>()
+                            .get(4)
+                            .unwrap_or(&"Unknown")
+                            .to_string();
+                        
+                        let style = if Some(idx) == self.selected_key_vault_index {
+                            Style::default().bg(Color::Blue)
+                        } else {
+                            Style::default()
+                        };
+                        
+                        Row::new(vec![
+                            Cell::from(key_vault.name.clone()),
+                            Cell::from(resource_group),
+                        ]).style(style)
+                    })
+                    .collect();
+
+                let table = Table::new(rows, [
+                    Constraint::Fill(1),
+                    Constraint::Fill(1),
+                ])
+                .header(header)
+                .block(
+                    Block::new()
+                        .borders(Borders::all())
+                        .title_alignment(Alignment::Center)
+                        .title(Line::from(" Key Vaults "))
+                );
+
+                frame.render_widget(table, body_area);
             }
             Screen::Subscriptions => {
                 let header = Row::new(vec![
@@ -293,19 +338,17 @@ impl Tui {
         }
 
         // Render Status Bar
-        let status_text = self.status_message
-            .as_ref()
-            .map(|msg| msg.as_str())
-            .unwrap_or("Ready");
-        let status_style = if self.status_message.as_ref().map_or(false, |msg| msg.contains("Error")) {
-            Style::default().fg(Color::Red)
-        } else {
-            Style::default().fg(Color::Green)
-        };
-        let status_paragraph = Paragraph::new(status_text)
-            .style(status_style)
-            .wrap(Wrap { trim: true });
-        frame.render_widget(status_paragraph, status_area);
+        if let Some(ref status_text) = self.status_message {
+            let status_style = if status_text.contains("Error") {
+                Style::default().fg(Color::Red)
+            } else {
+                Style::default().fg(Color::Green)
+            };
+            let status_paragraph = Paragraph::new(status_text.as_str())
+                .style(status_style)
+                .wrap(Wrap { trim: true });
+            frame.render_widget(status_paragraph, status_area);
+        }
     }
 
     /// Handles crossterm [`Event`]s. Returns `true` if the TUI should quit.
@@ -323,6 +366,22 @@ impl Tui {
                 KeyCode::Char('S') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
                     // Switch to subscriptions screen
                     self.current_screen = Screen::Subscriptions;
+                    self.status_message = None;
+                }
+                KeyCode::Char('K') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
+                    // Switch to key vaults screen
+                    self.current_screen = Screen::KeyVaults;
+                    self.status_message = None;
+                    
+                    // Trigger key vault loading if we have a selected subscription
+                    if let Some(subscription) = self.selected_subscription_index
+                        .and_then(|idx| self.subscriptions.get(idx)) {
+                        let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+                            subscription_id: subscription.id.clone(),
+                        });
+                    } else {
+                        self.status_message = Some("No subscription selected. Please select a subscription first.".to_string());
+                    }
                 }
                 _ => {
                     // Other key combinations not handled
