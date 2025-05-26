@@ -34,12 +34,18 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 
     // Wait for all background tasks to finish.
     for handle in spawned_tasks {
-        let _ = handle.await.inspect_err(|e| eprintln!("{:?}", e));
+        let _ = handle.await.inspect_err(|e| {
+            // Only use eprintln when TUI is shutting down
+            eprintln!("Background task error during shutdown: {:?}", e);
+        });
     }
 }
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
 async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) {
+    // Show loading status
+    let _ = tx.send(TuiEvent::SetStatusMessage("Loading Key Vaults...".to_string())).await;
+
     // Get access token for the subscription
     let access_token = match crate::azure_api::get_access_token_for_subscription(&subscription_id).await {
         Ok(token) => token,

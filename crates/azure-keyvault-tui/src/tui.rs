@@ -4,9 +4,9 @@ use crossterm::event::{Event, KeyCode};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Alignment, Constraint, Layout},
-    style::Stylize as _,
+    style::{Color, Style, Stylize as _},
     text::{Line, Span, Text},
-    widgets::{Block, Borders},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -41,6 +41,10 @@ pub enum TuiEvent {
     KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
     /// An error occurred while loading Key Vaults.
     KeyVaultsLoadError(String),
+    /// Sets the status message to display to the user.
+    SetStatusMessage(String),
+    /// Clears the current status message.
+    ClearStatusMessage,
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -54,6 +58,8 @@ pub struct Tui {
     active_tasks: i16,
     /// The currently selected subscription or None. Defaults to the one from the AZ CLI config.
     subscription: Option<AzureSubscription>,
+    /// Current status message to display to the user.
+    status_message: Option<String>,
 }
 
 impl Default for Tui {
@@ -67,6 +73,7 @@ impl Default for Tui {
         Self {
             active_tasks: 0,
             subscription: default_subscription,
+            status_message: None,
         }
     }
 }
@@ -108,10 +115,16 @@ impl Tui {
                     }
                     TuiEvent::KeyVaultsLoaded(key_vaults) => {
                         // TODO: Update UI to display the loaded key vaults
-                        eprintln!("Loaded {} key vaults", key_vaults.len());
+                        self.status_message = Some(format!("Loaded {} key vaults", key_vaults.len()));
                     }
                     TuiEvent::KeyVaultsLoadError(error) => {
-                        eprintln!("Error loading key vaults: {}", error);
+                        self.status_message = Some(format!("Error loading key vaults: {}", error));
+                    }
+                    TuiEvent::SetStatusMessage(message) => {
+                        self.status_message = Some(message);
+                    }
+                    TuiEvent::ClearStatusMessage => {
+                        self.status_message = None;
                     }
                 },
                 // If all senders of TuiEvents have somehow been closed, we should kill this thread as well.
@@ -129,8 +142,12 @@ impl Tui {
     /// A private helper function that should only be called from [`Tui::run`].
     fn render(&self, frame: &mut Frame<'_>) {
         // Define areas/layout
-        let layout = Layout::vertical([Constraint::Length(6), Constraint::Fill(1)]);
-        let [header, body_area] = layout.areas(frame.area());
+        let layout = Layout::vertical([
+            Constraint::Length(6), 
+            Constraint::Fill(1), 
+            Constraint::Length(2)
+        ]);
+        let [header, body_area, status_area] = layout.areas(frame.area());
         let header_layout = Layout::horizontal([
             Constraint::Fill(1),
             Constraint::Fill(1),
@@ -191,6 +208,21 @@ impl Tui {
             .title(Line::from(" Key Vaults ").red());
 
         frame.render_widget(body, body_area);
+
+        // Render Status Bar
+        let status_text = self.status_message
+            .as_ref()
+            .map(|msg| msg.as_str())
+            .unwrap_or("Ready");
+        let status_style = if self.status_message.as_ref().map_or(false, |msg| msg.contains("Error")) {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default().fg(Color::Green)
+        };
+        let status_paragraph = Paragraph::new(status_text)
+            .style(status_style)
+            .wrap(Wrap { trim: true });
+        frame.render_widget(status_paragraph, status_area);
     }
 
     /// Handles crossterm [`Event`]s. Returns `true` if the TUI should quit.
