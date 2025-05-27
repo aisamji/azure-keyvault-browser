@@ -1,40 +1,16 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: 'Version bump level (major, minor, patch)'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-        default: 'patch'
+  push:
+    tags:
+      - '*-v*.*.*'
 
 jobs:
   # TODO: Add jobs for `cargo test`, `cargo check`, and `cargo clippy`. All must pass before `release` can be run.
-  bump-version:
-    name: Bump Version
+  hello-world:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install cargo-release
-        uses: baptiste0928/cargo-install@v3
-        with:
-          crate: cargo-release
-
-      - name: Configure Git
-        run: |
-          git config --global user.email "github-actions@users.noreply.github.com"
-          git config --global user.name "Github Actions"
-
-      - name: Release
-        run: |
-          cargo release ${{ inputs.bump }} --execute --no-confirm --no-publish
+      - run: echo 'Hello World!'
 
     # TODO: Create Github release based on above version/tag
