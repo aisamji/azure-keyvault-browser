@@ -377,34 +377,30 @@ impl Tui {
                 KeyCode::Char('K') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
                     self.switch_to(Screen::KeyVaults, tx_bg_task);
                 }
-                KeyCode::Up => {
-                    match self.current_screen {
-                        Screen::KeyVaults => {
-                            if !self.key_vaults.is_empty() {
-                                self.key_vaults_table_state.select_previous();
-                            }
-                        }
-                        Screen::Subscriptions => {
-                            if !self.subscriptions.is_empty() {
-                                self.subscriptions_table_state.select_previous();
-                            }
+                KeyCode::Up => match self.current_screen {
+                    Screen::KeyVaults => {
+                        if !self.key_vaults.is_empty() {
+                            self.key_vaults_table_state.select_previous();
                         }
                     }
-                }
-                KeyCode::Down => {
-                    match self.current_screen {
-                        Screen::KeyVaults => {
-                            if !self.key_vaults.is_empty() {
-                                self.key_vaults_table_state.select_next();
-                            }
-                        }
-                        Screen::Subscriptions => {
-                            if !self.subscriptions.is_empty() {
-                                self.subscriptions_table_state.select_next();
-                            }
+                    Screen::Subscriptions => {
+                        if !self.subscriptions.is_empty() {
+                            self.subscriptions_table_state.select_previous();
                         }
                     }
-                }
+                },
+                KeyCode::Down => match self.current_screen {
+                    Screen::KeyVaults => {
+                        if !self.key_vaults.is_empty() {
+                            self.key_vaults_table_state.select_next();
+                        }
+                    }
+                    Screen::Subscriptions => {
+                        if !self.subscriptions.is_empty() {
+                            self.subscriptions_table_state.select_next();
+                        }
+                    }
+                },
                 KeyCode::Enter => {
                     match self.current_screen {
                         Screen::KeyVaults => {
@@ -418,7 +414,8 @@ impl Tui {
                             }
                         }
                         Screen::Subscriptions => {
-                            if let Some(selected_index) = self.subscriptions_table_state.selected() {
+                            if let Some(selected_index) = self.subscriptions_table_state.selected()
+                            {
                                 if self.subscriptions.get(selected_index).is_some() {
                                     self.selected_subscription_index = Some(selected_index);
                                     self.selected_key_vault = None;
@@ -447,24 +444,23 @@ impl Tui {
         // Side Effects
         match screen {
             Screen::KeyVaults => {
-                    // Trigger key vault loading if we have a selected subscription
-                    if let Some(subscription) = self
-                        .selected_subscription_index
-                        .and_then(|idx| self.subscriptions.get(idx))
-                    {
-                        self.key_vaults = vec![];
-                        self.key_vaults_table_state = TableState::default();
-                        let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
-                            subscription_id: subscription.id.clone(),
-                        });
-                    } else {
-                        self.status_message = Some(
-                            "No subscription selected. Please select a subscription first."
-                                .to_string(),
-                        );
-                    }
-            },
-            Screen::Subscriptions => {},
+                // Trigger key vault loading if we have a selected subscription
+                if let Some(subscription) = self
+                    .selected_subscription_index
+                    .and_then(|idx| self.subscriptions.get(idx))
+                {
+                    self.key_vaults = vec![];
+                    self.key_vaults_table_state = TableState::default();
+                    let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+                        subscription_id: subscription.id.clone(),
+                    });
+                } else {
+                    self.status_message = Some(
+                        "No subscription selected. Please select a subscription first.".to_string(),
+                    );
+                }
+            }
+            Screen::Subscriptions => {}
         }
     }
 }

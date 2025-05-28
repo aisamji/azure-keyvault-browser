@@ -60,7 +60,9 @@ impl AzureProfile {
             .map_err(|e| anyhow!("Failed to execute 'az version --output json'. Please ensure Azure CLI is installed and accessible in PATH. Error: {}", e))?;
 
         if !output.status.success() {
-            return Err(anyhow!("Azure CLI command failed. Please ensure Azure CLI is properly installed."));
+            return Err(anyhow!(
+                "Azure CLI command failed. Please ensure Azure CLI is properly installed."
+            ));
         }
 
         let version_output = String::from_utf8(output.stdout)
