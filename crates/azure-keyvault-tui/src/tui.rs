@@ -437,6 +437,7 @@ impl Tui {
         return false;
     }
 
+    /// Switch to the given [`Screen`], executing any side effects as needed.
     fn switch_to(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
         self.current_screen = screen.clone();
         self.status_message = None;
