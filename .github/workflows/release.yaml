@@ -12,5 +12,8 @@ jobs:
     
     steps:
       - run: echo 'Hello World!'
+      - run: |
+          PACKAGE=$(echo '${{ github.ref_name }}' | sed 's/-v[0-9]\+\.[0-9]\+\.[0-9]\+.*$//')
+          echo "package=$PACKAGE" | tee -a $GITHUB_OUTPUT $GITHUB_ENV
 
     # TODO: Create Github release based on above version/tag
