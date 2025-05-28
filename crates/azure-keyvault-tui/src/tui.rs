@@ -46,10 +46,12 @@ pub enum TuiEvent {
     TerminalEvent(Event),
     /// Key Vaults have been successfully loaded.
     KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
-    /// Sets the status message to display to the user.
-    SetStatusMessage(String),
-    /// Clears the current status message.
-    ClearStatusMessage,
+    /// Sets a success status message to display to the user.
+    SetSuccessStatus(String),
+    /// Sets an error status message to display to the user.
+    SetErrorStatus(String),
+    /// Clears the current status.
+    ClearStatus,
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -75,8 +77,8 @@ pub struct Tui {
     current_screen: Screen,
     /// Azure CLI version.
     azure_cli_version: String,
-    /// Current status message to display to the user.
-    status_message: Option<String>,
+    /// Current status to display to the user.
+    status: Option<Result<String, String>>,
 }
 
 impl Default for Tui {
@@ -115,7 +117,7 @@ impl Default for Tui {
             selected_key_vault: None,
             current_screen,
             azure_cli_version,
-            status_message: None,
+            status: None,
         }
     }
 }
@@ -159,14 +161,17 @@ impl Tui {
                     }
                     TuiEvent::KeyVaultsLoaded(key_vaults) => {
                         self.key_vaults = key_vaults;
-                        self.status_message =
-                            Some(format!("Loaded {} key vaults", self.key_vaults.len()));
+                        self.status =
+                            Some(Ok(format!("Loaded {} key vaults", self.key_vaults.len())));
                     }
-                    TuiEvent::SetStatusMessage(message) => {
-                        self.status_message = Some(message);
+                    TuiEvent::SetSuccessStatus(message) => {
+                        self.status = Some(Ok(message));
                     }
-                    TuiEvent::ClearStatusMessage => {
-                        self.status_message = None;
+                    TuiEvent::SetErrorStatus(message) => {
+                        self.status = Some(Err(message));
+                    }
+                    TuiEvent::ClearStatus => {
+                        self.status = None;
                     }
                 },
                 // If all senders of TuiEvents have somehow been closed, we should kill this thread as well.
@@ -346,13 +351,12 @@ impl Tui {
         }
 
         // Render Status Bar
-        if let Some(ref status_text) = self.status_message {
-            let status_style = if status_text.contains("Error") {
-                Style::default().fg(Color::Red)
-            } else {
-                Style::default().fg(Color::Green)
+        if let Some(ref status_result) = self.status {
+            let (status_text, status_style) = match status_result {
+                Ok(text) => (text.as_str(), Style::default().fg(Color::Green)),
+                Err(text) => (text.as_str(), Style::default().fg(Color::Red)),
             };
-            let status_paragraph = Paragraph::new(status_text.as_str())
+            let status_paragraph = Paragraph::new(status_text)
                 .style(status_style)
                 .wrap(Wrap { trim: true });
             frame.render_widget(status_paragraph, status_area);
@@ -407,8 +411,8 @@ impl Tui {
                             if let Some(selected_index) = self.key_vaults_table_state.selected() {
                                 if let Some(key_vault) = self.key_vaults.get(selected_index) {
                                     self.selected_key_vault = Some(key_vault.clone());
-                                    self.status_message =
-                                        Some(format!("Activated Key Vault: {}", key_vault.name));
+                                    self.status =
+                                        Some(Ok(format!("Activated Key Vault: {}", key_vault.name)));
                                     // TODO: Automatically switch to Secrets screen.
                                 }
                             }
@@ -440,7 +444,7 @@ impl Tui {
     /// Switch to the given [`Screen`], executing any side effects as needed.
     fn switch_to(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
         self.current_screen = screen.clone();
-        self.status_message = None;
+        self.status = None;
 
         // Side Effects
         match screen {
@@ -456,9 +460,9 @@ impl Tui {
                         subscription_id: subscription.id.clone(),
                     });
                 } else {
-                    self.status_message = Some(
+                    self.status = Some(Err(
                         "No subscription selected. Please select a subscription first.".to_string(),
-                    );
+                    ));
                 }
             }
             Screen::Subscriptions => {}
