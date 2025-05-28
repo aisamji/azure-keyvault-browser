@@ -11,6 +11,7 @@ use ratatui::{
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
+    azure_api::KeyVault,
     azure_profile::{AzureProfile, AzureSubscription},
     background::TaskSpec,
 };
@@ -45,7 +46,7 @@ pub enum TuiEvent {
     /// Represents an interactive event made by the user.
     TerminalEvent(Event),
     /// Key Vaults have been successfully loaded.
-    KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
+    KeyVaultsLoaded(Vec<KeyVault>),
     /// Sets a success status message to display to the user.
     SetSuccessStatus(String),
     /// Sets an error status message to display to the user.
@@ -68,11 +69,11 @@ pub struct Tui {
     /// Index of the currently active subscription.
     selected_subscription_index: Option<usize>,
     /// List of loaded key vaults.
-    key_vaults: Vec<crate::azure_api::KeyVault>,
+    key_vaults: Vec<KeyVault>,
     /// Table state for key vaults selection.
     key_vaults_table_state: TableState,
     /// The currently activated key vault.
-    selected_key_vault: Option<crate::azure_api::KeyVault>,
+    selected_key_vault: Option<KeyVault>,
     /// The current screen being displayed.
     current_screen: Screen,
     /// Azure CLI version.
@@ -279,73 +280,11 @@ impl Tui {
         // Render Body based on current screen
         match self.current_screen {
             Screen::KeyVaults => {
-                let header = Row::new(vec![
-                    Cell::from("Name").style(Style::default().bold()),
-                    Cell::from("Resource Group").style(Style::default().bold()),
-                ]);
-
-                let rows: Vec<Row> = self
-                    .key_vaults
-                    .iter()
-                    .map(|key_vault| {
-                        Row::new(vec![
-                            Cell::from(key_vault.name.clone()),
-                            Cell::from(key_vault.resource_group()),
-                        ])
-                    })
-                    .collect();
-
-                let table = Table::new(rows, [Constraint::Fill(1), Constraint::Fill(1)])
-                    .header(header)
-                    .block(
-                        Block::new()
-                            .borders(Borders::all())
-                            .title_alignment(Alignment::Center)
-                            .title(Line::from(" Key Vaults ")),
-                    )
-                    .row_highlight_style(Style::default().bg(Color::Blue));
-
+                let table = keyvaults_as_table(self.key_vaults.as_ref());
                 frame.render_stateful_widget(table, body_area, &mut self.key_vaults_table_state);
             }
             Screen::Subscriptions => {
-                let header = Row::new(vec![
-                    Cell::from("Name").style(Style::default().bold()),
-                    Cell::from("ID").style(Style::default().bold()),
-                    Cell::from("Tenant ID").style(Style::default().bold()),
-                    Cell::from("Auth").style(Style::default().bold()),
-                ]);
-
-                let rows: Vec<Row> = self
-                    .subscriptions
-                    .iter()
-                    .map(|subscription| {
-                        Row::new(vec![
-                            Cell::from(subscription.name.clone()),
-                            Cell::from(subscription.id.clone()),
-                            Cell::from(subscription.tenant_id.clone()),
-                            Cell::from(subscription.user.to_string()),
-                        ])
-                    })
-                    .collect();
-
-                let table = Table::new(
-                    rows,
-                    [
-                        Constraint::Fill(2),
-                        Constraint::Fill(3),
-                        Constraint::Fill(3),
-                        Constraint::Fill(2),
-                    ],
-                )
-                .header(header)
-                .block(
-                    Block::new()
-                        .borders(Borders::all())
-                        .title_alignment(Alignment::Center)
-                        .title(Line::from(" Subscriptions ")),
-                )
-                .row_highlight_style(Style::default().bg(Color::Blue));
-
+                let table = subscriptions_as_table(self.subscriptions.as_ref());
                 frame.render_stateful_widget(table, body_area, &mut self.subscriptions_table_state);
             }
         }
@@ -411,8 +350,10 @@ impl Tui {
                             if let Some(selected_index) = self.key_vaults_table_state.selected() {
                                 if let Some(key_vault) = self.key_vaults.get(selected_index) {
                                     self.selected_key_vault = Some(key_vault.clone());
-                                    self.status =
-                                        Some(Ok(format!("Activated Key Vault: {}", key_vault.name)));
+                                    self.status = Some(Ok(format!(
+                                        "Activated Key Vault: {}",
+                                        key_vault.name
+                                    )));
                                     // TODO: Automatically switch to Secrets screen.
                                 }
                             }
@@ -468,4 +409,70 @@ impl Tui {
             Screen::Subscriptions => {}
         }
     }
+}
+
+fn subscriptions_as_table(subscriptions: &Vec<AzureSubscription>) -> Table<'_> {
+    let header = Row::new(vec![
+        Cell::from("Name").style(Style::default().bold()),
+        Cell::from("ID").style(Style::default().bold()),
+        Cell::from("Tenant ID").style(Style::default().bold()),
+        Cell::from("Auth").style(Style::default().bold()),
+    ]);
+
+    let rows: Vec<Row> = subscriptions
+        .iter()
+        .map(|subscription| {
+            Row::new(vec![
+                Cell::from(subscription.name.clone()),
+                Cell::from(subscription.id.clone()),
+                Cell::from(subscription.tenant_id.clone()),
+                Cell::from(subscription.user.to_string()),
+            ])
+        })
+        .collect();
+
+    Table::new(
+        rows,
+        [
+            Constraint::Fill(2),
+            Constraint::Fill(3),
+            Constraint::Fill(3),
+            Constraint::Fill(2),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::new()
+            .borders(Borders::all())
+            .title_alignment(Alignment::Center)
+            .title(Line::from(" Subscriptions ")),
+    )
+    .row_highlight_style(Style::default().bg(Color::Blue))
+}
+
+fn keyvaults_as_table(keyvaults: &Vec<KeyVault>) -> Table<'_> {
+    let header = Row::new(vec![
+        Cell::from("Name").style(Style::default().bold()),
+        Cell::from("Resource Group").style(Style::default().bold()),
+    ]);
+
+    let rows: Vec<Row> = keyvaults
+        .iter()
+        .map(|key_vault| {
+            Row::new(vec![
+                Cell::from(key_vault.name.clone()),
+                Cell::from(key_vault.resource_group()),
+            ])
+        })
+        .collect();
+
+    Table::new(rows, [Constraint::Fill(1), Constraint::Fill(1)])
+        .header(header)
+        .block(
+            Block::new()
+                .borders(Borders::all())
+                .title_alignment(Alignment::Center)
+                .title(Line::from(" Key Vaults ")),
+        )
+        .row_highlight_style(Style::default().bg(Color::Blue))
 }
