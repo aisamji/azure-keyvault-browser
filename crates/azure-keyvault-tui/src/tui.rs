@@ -357,7 +357,9 @@ impl TuiState {
         false
     }
 
-    /// Switch to the given [`Screen`], executing any side effects as needed.
+    /// Switch to the given [`Screen`], loading data as necessary.
+    ///
+    /// Launches a background task to load the data asynchronously.
     fn load_screen(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
         self.current_screen = screen.clone();
         self.status = None;
