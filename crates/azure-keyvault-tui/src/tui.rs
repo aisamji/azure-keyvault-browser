@@ -309,10 +309,10 @@ impl TuiState {
                     return true;
                 }
                 KeyCode::Char('S') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
-                    self.switch_to(Screen::Subscriptions, tx_bg_task);
+                    self.load_screen(Screen::Subscriptions, tx_bg_task);
                 }
                 KeyCode::Char('K') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
-                    self.switch_to(Screen::KeyVaults, tx_bg_task);
+                    self.load_screen(Screen::KeyVaults, tx_bg_task);
                 }
                 KeyCode::Up => match self.current_screen {
                     Screen::KeyVaults | Screen::Subscriptions => {
@@ -344,7 +344,7 @@ impl TuiState {
                                 if self.subscriptions.get(selected_index).is_some() {
                                     self.selected_subscription_index = Some(selected_index);
                                     self.selected_key_vault = None;
-                                    self.switch_to(Screen::KeyVaults, tx_bg_task);
+                                    self.load_screen(Screen::KeyVaults, tx_bg_task);
                                 }
                             }
                         }
@@ -363,11 +363,11 @@ impl TuiState {
     }
 
     /// Switch to the given [`Screen`], executing any side effects as needed.
-    fn switch_to(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
+    fn load_screen(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
         self.current_screen = screen.clone();
         self.status = None;
 
-        // Side Effects
+        // Load new list for table/screen.
         match screen {
             Screen::KeyVaults => {
                 // Trigger key vault loading if we have a selected subscription
@@ -386,7 +386,9 @@ impl TuiState {
                     ));
                 }
             }
-            Screen::Subscriptions => {}
+            Screen::Subscriptions => {
+                // No need to load anything, the file is cached upon startup.
+            }
         }
     }
 }
