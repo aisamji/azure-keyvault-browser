@@ -37,7 +37,7 @@ impl AzureProfile {
             .filter_map(|x| {
                 // Ignore undisplayable bytes, otherwise convert them into the equivalent char.
                 if x.is_ascii_alphanumeric() || x.is_ascii_punctuation() {
-                    Some((x.clone() as char).into())
+                    Some((*x as char).into())
                 } else {
                     None
                 }

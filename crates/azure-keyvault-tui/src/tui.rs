@@ -64,8 +64,8 @@ pub enum TuiEvent {
 pub struct TuiState {
     /// List of all available subscriptions.
     subscriptions: Vec<AzureSubscription>,
-    /// Index of the currently active subscription.
-    selected_subscription_index: Option<usize>,
+    /// The currently selected subscription.
+    selected_subscription: Option<AzureSubscription>,
     /// List of loaded key vaults.
     key_vaults: Vec<KeyVault>,
     /// The currently activated key vault.
@@ -95,10 +95,10 @@ impl Default for TuiState {
             .map(|ap| ap.subscriptions)
             .unwrap_or_default();
 
-        let selected_subscription_index = subscriptions.iter().position(|s| s.is_default);
+        let selected_subscription = subscriptions.iter().find(|s| s.is_default).cloned();
 
         // Initialize subscriptions table state with default selection if available
-        let current_screen = if selected_subscription_index.is_some() {
+        let current_screen = if selected_subscription.is_some() {
             Screen::KeyVaults
         } else {
             Screen::Subscriptions
@@ -106,7 +106,7 @@ impl Default for TuiState {
 
         Self {
             subscriptions,
-            selected_subscription_index,
+            selected_subscription,
             key_vaults: Vec::new(),
             table_state: TableState::default(),
             selected_key_vault: None,
@@ -134,10 +134,7 @@ impl TuiState {
         tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
         // Trigger initial Key Vault listing if we have a default subscription
-        if let Some(subscription) = self
-            .selected_subscription_index
-            .and_then(|idx| self.subscriptions.get(idx))
-        {
+        if let Some(subscription) = &self.selected_subscription {
             let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                 subscription_id: subscription.id.clone(),
             });
@@ -198,15 +195,12 @@ impl TuiState {
         let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
-        let current_subscription = self
-            .selected_subscription_index
-            .and_then(|idx| self.subscriptions.get(idx));
-
         let metadata = Text::from(vec![
             Line::from(vec![
                 Span::from("Tenant ID: ").bold(),
                 Span::from(
-                    current_subscription
+                    self.selected_subscription
+                        .as_ref()
                         .map(|s| s.tenant_id.as_str())
                         .unwrap_or("None"),
                 ),
@@ -214,7 +208,8 @@ impl TuiState {
             Line::from(vec![
                 Span::from("Subscription: ").bold(),
                 Span::from(
-                    current_subscription
+                    self.selected_subscription
+                        .as_ref()
                         .map(|s| format!("{} ({})", s.name, s.id))
                         .unwrap_or("None".to_string()),
                 ),
@@ -274,11 +269,11 @@ impl TuiState {
         // Render Body based on current screen
         match self.current_screen {
             Screen::KeyVaults => {
-                let table = keyvaults_as_table(self.key_vaults.as_ref());
+                let table = keyvaults_as_table(self.key_vaults.as_slice());
                 frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
             Screen::Subscriptions => {
-                let table = subscriptions_as_table(self.subscriptions.as_ref());
+                let table = subscriptions_as_table(self.subscriptions.as_slice());
                 frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
         }
@@ -341,8 +336,8 @@ impl TuiState {
                         Screen::Subscriptions => {
                             if let Some(selected_index) = self.table_state.selected()
                             {
-                                if self.subscriptions.get(selected_index).is_some() {
-                                    self.selected_subscription_index = Some(selected_index);
+                                if let Some(subscription) = self.subscriptions.get(selected_index) {
+                                    self.selected_subscription = Some(subscription.clone());
                                     self.selected_key_vault = None;
                                     self.load_screen(Screen::KeyVaults, tx_bg_task);
                                 }
@@ -359,7 +354,7 @@ impl TuiState {
             }
         }
 
-        return false;
+        false
     }
 
     /// Switch to the given [`Screen`], executing any side effects as needed.
@@ -371,10 +366,7 @@ impl TuiState {
         match screen {
             Screen::KeyVaults => {
                 // Trigger key vault loading if we have a selected subscription
-                if let Some(subscription) = self
-                    .selected_subscription_index
-                    .and_then(|idx| self.subscriptions.get(idx))
-                {
+                if let Some(subscription) = &self.selected_subscription {
                     self.key_vaults = vec![];
                     self.table_state = TableState::default();
                     let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
@@ -393,7 +385,7 @@ impl TuiState {
     }
 }
 
-fn subscriptions_as_table(subscriptions: &Vec<AzureSubscription>) -> Table<'_> {
+fn subscriptions_as_table(subscriptions: &[AzureSubscription]) -> Table<'_> {
     let header = Row::new(vec![
         Cell::from("Name").style(Style::default().bold()),
         Cell::from("ID").style(Style::default().bold()),
@@ -432,7 +424,7 @@ fn subscriptions_as_table(subscriptions: &Vec<AzureSubscription>) -> Table<'_> {
     .row_highlight_style(Style::default().bg(Color::Blue))
 }
 
-fn keyvaults_as_table(keyvaults: &Vec<KeyVault>) -> Table<'_> {
+fn keyvaults_as_table(keyvaults: &[KeyVault]) -> Table<'_> {
     let header = Row::new(vec![
         Cell::from("Name").style(Style::default().bold()),
         Cell::from("Resource Group").style(Style::default().bold()),

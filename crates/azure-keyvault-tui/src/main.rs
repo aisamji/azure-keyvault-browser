@@ -42,5 +42,5 @@ async fn main() -> io::Result<()> {
     eprintln!("Waiting on background tasks to complete.");
     bg_man_handle.await?;
     eprintln!("Background tasks finished.");
-    Ok(result?)
+    result
 }
