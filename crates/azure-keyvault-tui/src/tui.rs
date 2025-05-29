@@ -61,7 +61,7 @@ pub enum TuiEvent {
 /// Contains a `run` function that is used to start the main loop. The fields of this struct should
 /// not be modified by any threads other than the one executing [`Self::run`]. Any modification
 /// requests should be sent to the appropriate [`Sender`] channel.
-pub struct Tui {
+pub struct TuiState {
     /// List of all available subscriptions.
     subscriptions: Vec<AzureSubscription>,
     /// Table state for subscriptions selection.
@@ -82,7 +82,7 @@ pub struct Tui {
     status: Option<Result<String, String>>,
 }
 
-impl Default for Tui {
+impl Default for TuiState {
     fn default() -> Self {
         // Get Azure CLI version first, crash if not available
         let azure_cli_version = AzureProfile::get_azure_cli_version().unwrap_or_else(|e| {
@@ -123,7 +123,7 @@ impl Default for Tui {
     }
 }
 
-impl Tui {
+impl TuiState {
     /// Redraws the terminal every time a [`TuiEvent`] is received.
     ///
     /// Be sure to only call this function with [`tokio::task::spawn_blocking`]. This function
