@@ -64,14 +64,10 @@ pub enum TuiEvent {
 pub struct TuiState {
     /// List of all available subscriptions.
     subscriptions: Vec<AzureSubscription>,
-    /// Table state for subscriptions selection.
-    subscriptions_table_state: TableState,
     /// Index of the currently active subscription.
     selected_subscription_index: Option<usize>,
     /// List of loaded key vaults.
     key_vaults: Vec<KeyVault>,
-    /// Table state for key vaults selection.
-    key_vaults_table_state: TableState,
     /// The currently activated key vault.
     selected_key_vault: Option<KeyVault>,
     /// The current screen being displayed.
@@ -80,6 +76,10 @@ pub struct TuiState {
     azure_cli_version: String,
     /// Current status to display to the user.
     status: Option<Result<String, String>>,
+
+    // States for Widgets
+    /// Table state for table selections.
+    table_state: TableState,
 }
 
 impl Default for TuiState {
@@ -98,11 +98,6 @@ impl Default for TuiState {
         let selected_subscription_index = subscriptions.iter().position(|s| s.is_default);
 
         // Initialize subscriptions table state with default selection if available
-        let mut subscriptions_table_state = TableState::default();
-        if let Some(default_index) = selected_subscription_index {
-            subscriptions_table_state.select(Some(default_index));
-        }
-
         let current_screen = if selected_subscription_index.is_some() {
             Screen::KeyVaults
         } else {
@@ -111,10 +106,9 @@ impl Default for TuiState {
 
         Self {
             subscriptions,
-            subscriptions_table_state,
             selected_subscription_index,
             key_vaults: Vec::new(),
-            key_vaults_table_state: TableState::default(),
+            table_state: TableState::default(),
             selected_key_vault: None,
             current_screen,
             azure_cli_version,
@@ -281,11 +275,11 @@ impl TuiState {
         match self.current_screen {
             Screen::KeyVaults => {
                 let table = keyvaults_as_table(self.key_vaults.as_ref());
-                frame.render_stateful_widget(table, body_area, &mut self.key_vaults_table_state);
+                frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
             Screen::Subscriptions => {
                 let table = subscriptions_as_table(self.subscriptions.as_ref());
-                frame.render_stateful_widget(table, body_area, &mut self.subscriptions_table_state);
+                frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
         }
 
@@ -321,33 +315,19 @@ impl TuiState {
                     self.switch_to(Screen::KeyVaults, tx_bg_task);
                 }
                 KeyCode::Up => match self.current_screen {
-                    Screen::KeyVaults => {
-                        if !self.key_vaults.is_empty() {
-                            self.key_vaults_table_state.select_previous();
-                        }
-                    }
-                    Screen::Subscriptions => {
-                        if !self.subscriptions.is_empty() {
-                            self.subscriptions_table_state.select_previous();
-                        }
+                    Screen::KeyVaults | Screen::Subscriptions => {
+                        self.table_state.select_previous();
                     }
                 },
                 KeyCode::Down => match self.current_screen {
-                    Screen::KeyVaults => {
-                        if !self.key_vaults.is_empty() {
-                            self.key_vaults_table_state.select_next();
-                        }
-                    }
-                    Screen::Subscriptions => {
-                        if !self.subscriptions.is_empty() {
-                            self.subscriptions_table_state.select_next();
-                        }
+                    Screen::KeyVaults | Screen::Subscriptions => {
+                        self.table_state.select_next();
                     }
                 },
                 KeyCode::Enter => {
                     match self.current_screen {
                         Screen::KeyVaults => {
-                            if let Some(selected_index) = self.key_vaults_table_state.selected() {
+                            if let Some(selected_index) = self.table_state.selected() {
                                 if let Some(key_vault) = self.key_vaults.get(selected_index) {
                                     self.selected_key_vault = Some(key_vault.clone());
                                     self.status = Some(Ok(format!(
@@ -359,7 +339,7 @@ impl TuiState {
                             }
                         }
                         Screen::Subscriptions => {
-                            if let Some(selected_index) = self.subscriptions_table_state.selected()
+                            if let Some(selected_index) = self.table_state.selected()
                             {
                                 if self.subscriptions.get(selected_index).is_some() {
                                     self.selected_subscription_index = Some(selected_index);
@@ -396,7 +376,7 @@ impl TuiState {
                     .and_then(|idx| self.subscriptions.get(idx))
                 {
                     self.key_vaults = vec![];
-                    self.key_vaults_table_state = TableState::default();
+                    self.table_state = TableState::default();
                     let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                         subscription_id: subscription.id.clone(),
                     });
