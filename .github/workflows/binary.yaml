@@ -1,0 +1,66 @@
+name: Upload Binaries
+run-name: Upload Binaries (${{ github.ref_name }})
+
+on:
+  push:
+    tags:
+      - '*-v[0-9]*.[0-9]*.[0-9]*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # TODO: only do this if the crate specified in the tag has at least one binary.
+  # TODO: Add support for crates that have more than one binary.
+  build-binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_triple: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target_triple: x86_64-pc-windows-msvc
+          - os: macos-13
+            target_triple: x86_64-apple-darwin
+          - os: macos-latest
+            target_triple: aarch64-apple-darwin
+    
+    name: Build Binary (${{ matrix.target_triple }})
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+    
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+ 
+    # TODO: Only build the requested crate.
+    - name: Build release
+      run: cargo build --release --target ${{ matrix.target_triple }}
+    
+    - name: Extract version from tag
+      id: version
+      run: echo "version=${{ github.ref_name }}" | sed 's/.*-v//' >> $GITHUB_OUTPUT
+
+    - name: Compress binary (*nix)
+      if: ${{ runner.os != 'windows' }}
+      run: |
+        tar --create --gunzip --file="azure-keyvault-tui-${{ steps.version.outputs.version }}-${{ matrix.target_triple }}.tar.gz" target/${{ matrix.target_triple }}/release/azure-keyvault-tui
+
+    - name: Compress binary (windows)
+      if: ${{ runner.os == 'windows' }}
+      run: |
+        Compress-Archive -Path target/${{ matrix.target_triple }}/release/azure-keyvault-tui.exe -DestinationPath "azure-keyvault-tui-${{ steps.version.outputs.version }}-${{ matrix.target_triple }}.zip"
+    
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        tag: ${{ github.ref_name }}
+        artifacts: "*.tar.gz,*.zip"
+        token: ${{ github.token }}
