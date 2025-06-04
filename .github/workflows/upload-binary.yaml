@@ -49,7 +49,7 @@ jobs:
 
   build-binaries:
     needs: setup
-    if: ${{ fromJSON(needs.setup.outputs.binaries) != null && length(fromJSON(needs.setup.outputs.binaries)) > 0 }}
+    if: ${{ needs.setup.outputs.binaries != '[]' }}
     name: Build Binary for ${{ inputs.os }}
     runs-on: ${{ inputs.os }}
     
