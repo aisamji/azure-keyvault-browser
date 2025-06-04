@@ -44,6 +44,9 @@ jobs:
 
   upload-binaries:
     needs: release-plz
+    permissions:
+      contents: write
+
     strategy:
       matrix: ${{ fromJSON(needs.release-plz.outputs.matrix) }}
       fail-fast: false
