@@ -45,7 +45,7 @@ jobs:
   upload-binaries:
     needs: release-plz
     strategy:
-      matrix: ${{ fromJSON(needs.release-plz.outputs.matrix }}
+      matrix: ${{ fromJSON(needs.release-plz.outputs.matrix) }}
       fail-fast: false
 
     uses: ./.github/workflows/upload-binary.yaml
