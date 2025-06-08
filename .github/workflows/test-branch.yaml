@@ -1,0 +1,61 @@
+name: Run Tests
+run-name: Run Tests on ${{ github.repository }}@${{ github.ref_name }}
+
+on:
+  pull_request:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+permissions:
+  checks: write # Permissions to write check annotations
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest, macos-13 ]
+
+    name: Check and Test
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      # TODO: Convert both of the following into annotations. `cargo-action-fmt` is promising but does not always display all messages.
+      - name: Cargo Check
+        run: cargo check --all-features --keep-going
+
+      - name: Cargo Test
+        run: cargo test --all-features --no-fail-fast
+
+  lint:
+    name: Format and Clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # TODO: Convert both of the following into annotations. `cargo-action-fmt` is promising but does not always display all messages.
+      - name: Cargo Fmt
+        run: cargo fmt --all --check
+
+      - name: Cargo Clippy
+        run: cargo clippy --no-deps
+
