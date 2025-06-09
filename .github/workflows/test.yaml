@@ -17,7 +17,7 @@ concurrency:
 jobs:
   validate:
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest, macos-13 ]
 
@@ -34,25 +34,13 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
-      # TODO: Convert both of the following into annotations. `cargo-action-fmt` is promising but does not always display all messages.
+      # TODO: Convert all of the following into annotations. `cargo-action-fmt` is promising but does not always display all messages, and it does not work for `cargo test` and `cargo fmt`.
       - name: Cargo Check
         run: cargo check --all-features --keep-going
 
       - name: Cargo Test
         run: cargo test --all-features --no-fail-fast
 
-  lint:
-    name: Format and Clippy
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      # TODO: Convert both of the following into annotations. `cargo-action-fmt` is promising but does not always display all messages.
       - name: Cargo Fmt
         run: cargo fmt --all --check
 
