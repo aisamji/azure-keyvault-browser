@@ -9,6 +9,7 @@ on:
 
 permissions:
   checks: write # Permissions to write check annotations
+  contents: read # Permissions needed for clippy-check and rustfmt-check
 
 concurrency:
   group: test-${{ github.ref }}
@@ -34,16 +35,32 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
-      # TODO: Convert all of the following into annotations. `cargo-action-fmt` is promising but does not always display all messages, and it does not work for `cargo test` and `cargo fmt`.
       - name: Cargo Check
         run: cargo check --all-features --keep-going
 
       - name: Cargo Test
         run: cargo test --all-features --no-fail-fast
 
+  lint:
+    name: Format and Clippy
+    runs-on: ubuntu-latest
+    needs: validate  # First make it works, then worry about code quality.
+
+    steps:
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
       - name: Cargo Fmt
-        run: cargo fmt --all --check
+        uses: loliGothicK/rustfmt-check@v0.5.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          flags: --all
 
       - name: Cargo Clippy
-        run: cargo clippy --no-deps
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --no-deps
 
