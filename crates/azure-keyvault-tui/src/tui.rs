@@ -204,6 +204,14 @@ impl Tui {
 
         let metadata = Text::from(vec![
             Line::from(vec![
+                Span::from("Tenant ID: ").bold(),
+                Span::from(
+                    current_subscription
+                        .map(|s| s.tenant_id.as_str())
+                        .unwrap_or("None"),
+                ),
+            ]),
+            Line::from(vec![
                 Span::from("Subscription: ").bold(),
                 Span::from(
                     current_subscription
@@ -217,14 +225,6 @@ impl Tui {
                     self.selected_key_vault
                         .as_ref()
                         .map(|kv| kv.resource_group())
-                        .unwrap_or("None"),
-                ),
-            ]),
-            Line::from(vec![
-                Span::from("Tenant ID: ").bold(),
-                Span::from(
-                    current_subscription
-                        .map(|s| s.tenant_id.as_str())
                         .unwrap_or("None"),
                 ),
             ]),
@@ -441,6 +441,7 @@ impl Tui {
                                 if let Some(subscription) = self.subscriptions.get(selected_index) {
                                     // Clear selected key vault when switching subscriptions
                                     self.selected_key_vault = None;
+                                    self.key_vaults = vec![];
                                     self.key_vaults_table_state = TableState::default();
                                     
                                     // Update the active subscription
