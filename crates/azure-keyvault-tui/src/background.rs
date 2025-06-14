@@ -49,13 +49,12 @@ async fn list_key_vaults(subscription_id: String) {
     ));
 
     // Get access token for the subscription
-    let access_token =
-        match get_access_token_for_subscription(&subscription_id).await {
-            Ok(token) => token,
-            Err(e) => {
-                abort!("Failed to get access token: {}", e);
-            }
-        };
+    let access_token = match get_access_token_for_subscription(&subscription_id).await {
+        Ok(token) => token,
+        Err(e) => {
+            abort!("Failed to get access token: {}", e);
+        }
+    };
 
     // List key vaults using the token
     match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {

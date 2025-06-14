@@ -1,9 +1,12 @@
+use darling::{FromMeta, ast::NestedMeta};
 use proc_macro::TokenStream;
+use proc_macro_error::{abort, proc_macro_error};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{FnArg, ItemFn, parse_macro_input, parse_quote, parse2, DeriveInput, Data, Fields, Variant, Attribute, Meta, spanned::Spanned};
-use darling::{FromMeta, ast::NestedMeta};
-use proc_macro_error::{proc_macro_error, abort};
+use syn::{
+    Attribute, Data, DeriveInput, Fields, FnArg, ItemFn, Meta, Variant, parse_macro_input,
+    parse_quote, parse2, spanned::Spanned,
+};
 
 #[derive(FromMeta)]
 struct CallbackArgs {
@@ -27,7 +30,10 @@ pub fn background_task(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn background_task_impl(mut function: ItemFn, args: CallbackArgs) -> TokenStream2 {
-    function.sig.inputs.insert(0, event_sender_arg(&args.event_enum));
+    function
+        .sig
+        .inputs
+        .insert(0, event_sender_arg(&args.event_enum));
     let update_progress_macro = update_progress_macro();
     let abort_macro = abort_macro(&args.error_variant);
     let block = function.block.clone();
@@ -39,11 +45,14 @@ fn background_task_impl(mut function: ItemFn, args: CallbackArgs) -> TokenStream
         }
     })
     .unwrap_or_else(|e| {
-        abort!(proc_macro2::Span::mixed_site(), "Failed to parse function block: {}", e);
+        abort!(
+            proc_macro2::Span::mixed_site(),
+            "Failed to parse function block: {}",
+            e
+        );
     });
     quote! { #function }
 }
-
 
 fn event_sender_arg(event_type: &syn::Path) -> FnArg {
     let event_type_ident: syn::Type = syn::parse_quote!(#event_type);
@@ -93,29 +102,30 @@ pub fn background_task_spec_derive(input: TokenStream) -> TokenStream {
 
 fn background_task_spec_impl(input: DeriveInput) -> TokenStream2 {
     let enum_name = &input.ident;
-    
+
     // Parse the event_type from the derive macro arguments
     let event_type = extract_event_enum(&input.attrs);
     let event_type_ident: syn::Type = syn::parse_quote!(#event_type);
-    
+
     let variants = match input.data {
         Data::Enum(data_enum) => data_enum.variants,
-        _ => abort!(input.ident.span(), "BackgroundTaskSpec can only be derived for enums, found {}", 
-                   match input.data {
-                       Data::Struct(_) => "struct",
-                       Data::Union(_) => "union",
-                       _ => "unknown type",
-                   }),
+        _ => abort!(
+            input.ident.span(),
+            "BackgroundTaskSpec can only be derived for enums, found {}",
+            match input.data {
+                Data::Struct(_) => "struct",
+                Data::Union(_) => "union",
+                _ => "unknown type",
+            }
+        ),
     };
-    
-    let spawn_arms = variants.iter().map(|variant| {
-        generate_spawn_arm(variant)
-    }).collect::<Vec<_>>();
-    
+
+    let spawn_arms = variants.iter().map(generate_spawn_arm).collect::<Vec<_>>();
+
     quote! {
         impl #enum_name {
             /// Spawns a background task for this task specification.
-            /// 
+            ///
             /// This method consumes `self` to move the contained data into the spawned task.
             /// Returns a `JoinHandle` that can be used to await completion of the background task.
             pub fn spawn_task(self, tx: &tokio::sync::mpsc::Sender<#event_type_ident>) -> tokio::task::JoinHandle<()> {
@@ -130,7 +140,7 @@ fn background_task_spec_impl(input: DeriveInput) -> TokenStream2 {
 fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
     let variant_name = &variant.ident;
     let callback_name = extract_callback_name(&variant.attrs);
-    
+
     match &variant.fields {
         Fields::Unit => {
             if let Some(callback) = callback_name {
@@ -152,9 +162,9 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
             let field_names: Vec<syn::Ident> = (0..fields.unnamed.len())
                 .map(|i| syn::Ident::new(&format!("field_{}", i), proc_macro2::Span::mixed_site()))
                 .collect();
-            
+
             let pattern = quote! { Self::#variant_name(#(#field_names),*) };
-            
+
             if let Some(callback) = callback_name {
                 let args = quote! { tx_clone, #(#field_names),* };
                 quote! {
@@ -172,16 +182,21 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
             }
         }
         Fields::Named(fields) => {
-            let field_names: Vec<&syn::Ident> = fields.named.iter()
+            let field_names: Vec<&syn::Ident> = fields
+                .named
+                .iter()
                 .filter_map(|f| f.ident.as_ref())
                 .collect();
-            
+
             if field_names.len() != fields.named.len() {
-                abort!(variant.ident.span(), "All named fields must have identifiers");
+                abort!(
+                    variant.ident.span(),
+                    "All named fields must have identifiers"
+                );
             }
-            
+
             let pattern = quote! { Self::#variant_name { #(#field_names),* } };
-            
+
             if let Some(callback) = callback_name {
                 let args = quote! { tx_clone, #(#field_names),* };
                 quote! {
@@ -217,7 +232,10 @@ fn extract_event_enum(attrs: &[Attribute]) -> syn::Path {
             }
         }
     }
-    abort!(proc_macro2::Span::mixed_site(), "Missing #[taskspec(event_enum = \"YourEventType\")] attribute on enum");
+    abort!(
+        proc_macro2::Span::mixed_site(),
+        "Missing #[taskspec(event_enum = \"YourEventType\")] attribute on enum"
+    );
 }
 
 fn extract_callback_name(attrs: &[Attribute]) -> Option<syn::Ident> {
