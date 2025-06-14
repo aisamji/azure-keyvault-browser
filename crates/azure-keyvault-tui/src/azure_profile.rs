@@ -84,11 +84,11 @@ impl AzureProfile {
 pub struct AzureSubscription {
     pub id: String,
     pub name: String,
-    pub state: String,
+    pub _state: String,
     pub user: AzureCredential,
     pub is_default: bool,
     pub tenant_id: String,
-    pub environment_name: String,
+    pub _environment_name: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]

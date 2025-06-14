@@ -192,7 +192,7 @@ impl TuiState {
             Constraint::Fill(1),
             Constraint::Fill(1),
         ]);
-        let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
+        let [metadata_area, global_keymaps_area, _local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
         let metadata = Text::from(vec![

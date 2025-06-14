@@ -1,0 +1,96 @@
+name: Upload Binaries
+run-name: Upload Binaries (${{ inputs.os }} for ${{ inputs.tag }})
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  setup:
+    name: Setup and validate crate
+    runs-on: ubuntu-latest
+    outputs:
+      crate_name: ${{ steps.parse.outputs.crate_name }}
+      version: ${{ steps.parse.outputs.version }}
+      binaries: ${{ steps.check.outputs.binaries }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.tag }}
+    
+    - name: Parse tag
+      id: parse
+      run: |
+        tag='${{ inputs.tag }}'
+        # Extract crate name and version from tag format: {crate}-v{version}
+        crate_name=$(echo "$tag" | sed 's/-v[0-9].*//')
+        version=$(echo "$tag" | sed 's/.*-v//')
+        echo "crate_name=$crate_name" >> $GITHUB_OUTPUT
+        echo "version=$version" >> $GITHUB_OUTPUT
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Get crate binaries
+      id: check
+      run: |
+        binaries=$(cargo metadata --format-version=1 --no-deps | jq -c --arg crate "${{ steps.parse.outputs.crate_name }}" '[.packages[] | select(.name == $crate) | .targets[] | select(.kind[] == "bin") | .name]')
+        echo "binaries=$binaries" >> $GITHUB_OUTPUT
+
+  build-binaries:
+    needs: setup
+    if: ${{ needs.setup.outputs.binaries != '[]' }}
+    name: Build Binary for ${{ inputs.os }}
+    runs-on: ${{ inputs.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.tag }}
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+ 
+    - name: Build release
+      run: cargo build --release --package ${{ needs.setup.outputs.crate_name }}
+
+    - name: Compress binary (*nix)
+      if: ${{ runner.os != 'windows' }}
+      run: |
+        binaries='${{ needs.setup.outputs.binaries }}'
+        binary_paths=""
+        for binary in $(echo "$binaries" | jq -r '.[]'); do
+          binary_paths="$binary_paths target/release/$binary"
+        done
+        tar --create --gunzip --file='${{ needs.setup.outputs.crate_name }}-${{ needs.setup.outputs.version }}-${{ runner.os }}-${{ runner.arch }}.tar.gz' $binary_paths
+
+    - name: Compress binary (windows)
+      if: ${{ runner.os == 'windows' }}
+      run: |
+        $binaries = '${{ needs.setup.outputs.binaries }}' | ConvertFrom-Json
+        $binaryPaths = @()
+        foreach ($binary in $binaries) {
+          $binaryPaths += "target/release/$binary.exe"
+        }
+        Compress-Archive -Path $binaryPaths -DestinationPath '${{ needs.setup.outputs.crate_name }}-${{ needs.setup.outputs.version }}-${{ runner.os }}-${{ runner.arch }}.zip'
+    
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        tag: ${{ inputs.tag }}
+        artifacts: "*.tar.gz,*.zip"
+        token: ${{ github.token }}

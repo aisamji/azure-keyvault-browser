@@ -1,0 +1,56 @@
+name: Publish Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-plz:
+    if: ${{ github.repository_owner == 'aisamji' }}
+
+    name: Release-plz
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.setup-matrix.outputs.matrix }}
+
+    permissions:
+      pull-requests: write
+      contents: write
+
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - uses: druzsan/setup-matrix@v2
+        id: setup-matrix
+        with:
+          matrix: |
+            os: [ubuntu-latest, windows-latest, macos-latest, macos-13]
+            tag: ${{ toJSON(fromJSON(steps.release-plz.outputs.releases).*.tag) }}
+
+  upload-binaries:
+    needs: release-plz
+    permissions:
+      contents: write
+
+    strategy:
+      matrix: ${{ fromJSON(needs.release-plz.outputs.matrix) }}
+      fail-fast: false
+
+    uses: ./.github/workflows/upload-binary.yaml
+    with:
+      os: ${{ matrix.os }}
+      tag: ${{ matrix.tag }}

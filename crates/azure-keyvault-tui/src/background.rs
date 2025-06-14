@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::tui::TuiEvent;
+use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
 
 /// Represents different types of background tasks that can be launched.
 ///
