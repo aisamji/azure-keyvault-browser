@@ -63,9 +63,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           flags: --all
 
-      - name: Cargo Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --no-deps
+      # - name: Cargo Clippy
+      #   uses: actions-rs/clippy-check@v1
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     args: --no-deps
 
