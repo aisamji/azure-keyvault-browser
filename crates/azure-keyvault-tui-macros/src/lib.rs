@@ -133,12 +133,18 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
     
     match &variant.fields {
         Fields::Unit => {
-            quote! {
-                Self::#variant_name => {
-                    let tx_clone = tx.clone();
-                    tokio::task::spawn(async move {
-                        #callback_name(tx_clone).await;
-                    })
+            if let Some(callback) = callback_name {
+                quote! {
+                    Self::#variant_name => {
+                        let tx_clone = tx.clone();
+                        tokio::task::spawn(async move {
+                            #callback(tx_clone).await;
+                        })
+                    }
+                }
+            } else {
+                quote! {
+                    Self::#variant_name => {}
                 }
             }
         }
@@ -148,14 +154,20 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
                 .collect();
             
             let pattern = quote! { Self::#variant_name(#(#field_names),*) };
-            let args = quote! { tx_clone, #(#field_names),* };
             
-            quote! {
-                #pattern => {
-                    let tx_clone = tx.clone();
-                    tokio::task::spawn(async move {
-                        #callback_name(#args).await;
-                    })
+            if let Some(callback) = callback_name {
+                let args = quote! { tx_clone, #(#field_names),* };
+                quote! {
+                    #pattern => {
+                        let tx_clone = tx.clone();
+                        tokio::task::spawn(async move {
+                            #callback(#args).await;
+                        })
+                    }
+                }
+            } else {
+                quote! {
+                    #pattern => {}
                 }
             }
         }
@@ -169,14 +181,20 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
             }
             
             let pattern = quote! { Self::#variant_name { #(#field_names),* } };
-            let args = quote! { tx_clone, #(#field_names),* };
             
-            quote! {
-                #pattern => {
-                    let tx_clone = tx.clone();
-                    tokio::task::spawn(async move {
-                        #callback_name(#args).await;
-                    })
+            if let Some(callback) = callback_name {
+                let args = quote! { tx_clone, #(#field_names),* };
+                quote! {
+                    #pattern => {
+                        let tx_clone = tx.clone();
+                        tokio::task::spawn(async move {
+                            #callback(#args).await;
+                        })
+                    }
+                }
+            } else {
+                quote! {
+                    #pattern => {}
                 }
             }
         }
@@ -202,7 +220,7 @@ fn extract_event_enum(attrs: &[Attribute]) -> syn::Path {
     abort!(proc_macro2::Span::mixed_site(), "Missing #[taskspec(event_enum = \"YourEventType\")] attribute on enum");
 }
 
-fn extract_callback_name(attrs: &[Attribute]) -> syn::Ident {
+fn extract_callback_name(attrs: &[Attribute]) -> Option<syn::Ident> {
     for attr in attrs {
         if attr.path().is_ident("taskspec") {
             if let Meta::List(meta_list) = &attr.meta {
@@ -214,11 +232,11 @@ fn extract_callback_name(attrs: &[Attribute]) -> syn::Ident {
                     Ok(args) => args,
                     Err(e) => abort!(attr.span(), "Invalid taskspec attribute: {}", e),
                 };
-                return args.callback;
+                return Some(args.callback);
             }
         }
     }
-    abort!(proc_macro2::Span::mixed_site(), "Missing #[taskspec(callback = \"function_name\")] attribute on variant");
+    None
 }
 
 #[cfg(test)]
