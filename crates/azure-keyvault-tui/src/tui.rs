@@ -52,7 +52,7 @@ pub enum TuiEvent {
     /// Sets an error status message to display to the user.
     SetErrorStatus(String),
     /// Clears the current status.
-    ClearStatus,
+    _ClearStatus,
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -162,7 +162,7 @@ impl TuiState {
                     TuiEvent::SetErrorStatus(message) => {
                         self.status = Some(Err(message));
                     }
-                    TuiEvent::ClearStatus => {
+                    TuiEvent::_ClearStatus => {
                         self.status = None;
                     }
                 },
@@ -334,8 +334,7 @@ impl TuiState {
                             }
                         }
                         Screen::Subscriptions => {
-                            if let Some(selected_index) = self.table_state.selected()
-                            {
+                            if let Some(selected_index) = self.table_state.selected() {
                                 if let Some(subscription) = self.subscriptions.get(selected_index) {
                                     self.selected_subscription = Some(subscription.clone());
                                     self.selected_key_vault = None;
