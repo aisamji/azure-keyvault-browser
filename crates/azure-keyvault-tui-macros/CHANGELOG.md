@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/aisamji/azure-keyvault-tui/compare/azure-keyvault-tui-macros-v0.1.0...azure-keyvault-tui-macros-v0.1.1) - 2025-06-14
+
+### Other
+
+- Add version to Cargo.toml ([#24](https://github.com/aisamji/azure-keyvault-tui/pull/24))
+
 ## [0.1.0](https://github.com/aisamji/azure-keyvault-tui/releases/tag/azure-keyvault-tui-macros-v0.1.0) - 2025-06-14
 
 ### Other
