@@ -86,4 +86,3 @@ pub async fn get_access_token_for_subscription(subscription_id: &str) -> Result<
 
     Ok(token_response.token.secret().to_string())
 }
-
