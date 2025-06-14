@@ -58,12 +58,10 @@ jobs:
 
       - name: Cargo Fmt
         uses: clechasseur/rs-fmt-check@v2
-        continue-on-error: true
 
       - name: Cargo Clippy
         uses: actions-rs/clippy-check@v1
         with:
-          name: Format and Clippy
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --no-deps
+          args: --no-deps -- -D warnings
 
