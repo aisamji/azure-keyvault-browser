@@ -83,7 +83,7 @@ jobs:
         $binaries = '${{ needs.setup.outputs.binaries }}' | ConvertFrom-Json
         $binaryPaths = @()
         foreach ($binary in $binaries) {
-          $binaryPaths += 'target/release/$binary.exe'
+          $binaryPaths += "target/release/$binary.exe"
         }
         Compress-Archive -Path $binaryPaths -DestinationPath '${{ needs.setup.outputs.crate_name }}-${{ needs.setup.outputs.version }}-${{ runner.os }}-${{ runner.arch }}.zip'
     

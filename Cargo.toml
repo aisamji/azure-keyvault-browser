@@ -6,7 +6,7 @@ default-members = ["crates/*"]
 [workspace.package]
 edition = "2024"
 authors = ["Ali Samji <aisamji09@gmail.com>"]
-license = "MIT"
+license-file = "LICENSE"
 repository = "https://github.com/aisamji/azure-keyvault-tui"
 
 [workspace.dependencies]

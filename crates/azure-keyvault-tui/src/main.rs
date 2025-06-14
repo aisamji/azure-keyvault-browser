@@ -8,7 +8,7 @@ mod background;
 mod input;
 mod tui;
 
-use tui::Tui;
+use tui::TuiState;
 
 /// The application entrypoint
 ///
@@ -16,7 +16,7 @@ use tui::Tui;
 #[tokio::main]
 async fn main() -> io::Result<()> {
     // TODO: Use Clap to parse arguments and configure the application before launching the TUI.
-    let mut app = Tui::default();
+    let mut app = TuiState::default();
 
     // All rx must be mut, but the function calls take care of that.
     let (tx_tui_event, rx_tui_event) = mpsc::channel(10);
@@ -42,5 +42,5 @@ async fn main() -> io::Result<()> {
     eprintln!("Waiting on background tasks to complete.");
     bg_man_handle.await?;
     eprintln!("Background tasks finished.");
-    Ok(result?)
+    result
 }

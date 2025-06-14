@@ -37,7 +37,7 @@ impl AzureProfile {
             .filter_map(|x| {
                 // Ignore undisplayable bytes, otherwise convert them into the equivalent char.
                 if x.is_ascii_alphanumeric() || x.is_ascii_punctuation() {
-                    Some((x.clone() as char).into())
+                    Some((*x as char).into())
                 } else {
                     None
                 }
@@ -60,7 +60,9 @@ impl AzureProfile {
             .map_err(|e| anyhow!("Failed to execute 'az version --output json'. Please ensure Azure CLI is installed and accessible in PATH. Error: {}", e))?;
 
         if !output.status.success() {
-            return Err(anyhow!("Azure CLI command failed. Please ensure Azure CLI is properly installed."));
+            return Err(anyhow!(
+                "Azure CLI command failed. Please ensure Azure CLI is properly installed."
+            ));
         }
 
         let version_output = String::from_utf8(output.stdout)
@@ -82,11 +84,11 @@ impl AzureProfile {
 pub struct AzureSubscription {
     pub id: String,
     pub name: String,
-    pub state: String,
+    pub _state: String,
     pub user: AzureCredential,
     pub is_default: bool,
     pub tenant_id: String,
-    pub environment_name: String,
+    pub _environment_name: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
