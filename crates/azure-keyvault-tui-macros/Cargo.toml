@@ -1,5 +1,6 @@
 [package]
 name = "azure-keyvault-tui-macros"
+description = "Macros for the azure-keyvault-tui crate."
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
