@@ -51,6 +51,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
+          components: rustfmt
 
       - name: Cargo Fmt
         uses: loliGothicK/rustfmt-check@v0.5.0
