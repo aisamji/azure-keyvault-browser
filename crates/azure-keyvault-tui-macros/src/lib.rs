@@ -6,20 +6,20 @@ use darling::{FromMeta, ast::NestedMeta};
 
 #[derive(FromMeta)]
 struct MacroArgs {
-    event_type: String,
+    event_enum: String,
     error_event: String,
 }
 
 #[proc_macro_attribute]
-pub fn background_task_callback(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn background_task(args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
     let attr_args = NestedMeta::parse_meta_list(args.into()).expect("Invalid attribute arguments");
     let args = MacroArgs::from_list(&attr_args).expect("Invalid macro arguments");
-    background_task_callback_impl(input, args).into()
+    background_task_impl(input, args).into()
 }
 
-fn background_task_callback_impl(mut function: ItemFn, args: MacroArgs) -> TokenStream2 {
-    function.sig.inputs.insert(0, event_sender_arg(&args.event_type));
+fn background_task_impl(mut function: ItemFn, args: MacroArgs) -> TokenStream2 {
+    function.sig.inputs.insert(0, event_sender_arg(&args.event_enum));
     let update_progress_macro = update_progress_macro();
     let abort_macro = abort_macro(&args.error_event);
     let block = function.block.clone();
@@ -70,7 +70,7 @@ struct TaskSpecArgs {
     #[darling(default)]
     callback: Option<String>,
     #[darling(default)]
-    event_type: Option<String>,
+    event_enum: Option<String>,
 }
 
 #[proc_macro_derive(BackgroundTaskSpec, attributes(taskspec))]
@@ -83,7 +83,7 @@ fn background_task_spec_impl(input: DeriveInput) -> TokenStream2 {
     let enum_name = &input.ident;
     
     // Parse the event_type from the derive macro arguments
-    let event_type = extract_event_type(&input.attrs);
+    let event_type = extract_event_enum(&input.attrs);
     let event_type_ident: syn::Type = syn::parse_str(&event_type).unwrap();
     
     let variants = match input.data {
@@ -162,7 +162,7 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
     }
 }
 
-fn extract_event_type(attrs: &[Attribute]) -> String {
+fn extract_event_enum(attrs: &[Attribute]) -> String {
     for attr in attrs {
         if attr.path().is_ident("taskspec") {
             if let Meta::List(meta_list) = &attr.meta {
@@ -170,8 +170,8 @@ fn extract_event_type(attrs: &[Attribute]) -> String {
                     .expect("Invalid taskspec attribute");
                 let args = TaskSpecArgs::from_list(&nested)
                     .expect("Invalid taskspec attribute");
-                if let Some(event_type) = args.event_type {
-                    return event_type;
+                if let Some(event_enum) = args.event_enum {
+                    return event_enum;
                 }
             }
         }
