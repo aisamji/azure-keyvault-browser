@@ -57,7 +57,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cargo Fmt
-        uses: actions-rust-lang/rustfmt@v1
+        uses: clechasseur/rs-fmt-check@ev2
 
       # - name: Cargo Clippy
       #   uses: actions-rs/clippy-check@v1
