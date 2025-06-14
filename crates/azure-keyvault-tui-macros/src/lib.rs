@@ -1,27 +1,35 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{FnArg, ItemFn, parse_macro_input, parse_quote, parse2, DeriveInput, Data, Fields, Variant, Attribute, Meta};
+use syn::{FnArg, ItemFn, parse_macro_input, parse_quote, parse2, DeriveInput, Data, Fields, Variant, Attribute, Meta, spanned::Spanned};
 use darling::{FromMeta, ast::NestedMeta};
+use proc_macro_error::{proc_macro_error, abort};
 
 #[derive(FromMeta)]
-struct MacroArgs {
-    event_enum: String,
-    error_event: String,
+struct CallbackArgs {
+    event_enum: syn::Path,
+    error_variant: syn::Expr,
 }
 
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn background_task(args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
-    let attr_args = NestedMeta::parse_meta_list(args.into()).expect("Invalid attribute arguments");
-    let args = MacroArgs::from_list(&attr_args).expect("Invalid macro arguments");
+    let attr_args = match NestedMeta::parse_meta_list(args.into()) {
+        Ok(args) => args,
+        Err(e) => abort!(e.span(), "Invalid attribute arguments: {}", e),
+    };
+    let args = match CallbackArgs::from_list(&attr_args) {
+        Ok(args) => args,
+        Err(e) => return TokenStream::from(e.write_errors()),
+    };
     background_task_impl(input, args).into()
 }
 
-fn background_task_impl(mut function: ItemFn, args: MacroArgs) -> TokenStream2 {
+fn background_task_impl(mut function: ItemFn, args: CallbackArgs) -> TokenStream2 {
     function.sig.inputs.insert(0, event_sender_arg(&args.event_enum));
     let update_progress_macro = update_progress_macro();
-    let abort_macro = abort_macro(&args.error_event);
+    let abort_macro = abort_macro(&args.error_variant);
     let block = function.block.clone();
     function.block = parse2(quote! {
         {
@@ -30,13 +38,15 @@ fn background_task_impl(mut function: ItemFn, args: MacroArgs) -> TokenStream2 {
             #block
         }
     })
-    .unwrap();
+    .unwrap_or_else(|e| {
+        abort!(proc_macro2::Span::mixed_site(), "Failed to parse function block: {}", e);
+    });
     quote! { #function }
 }
 
 
-fn event_sender_arg(event_type: &str) -> FnArg {
-    let event_type_ident: syn::Type = syn::parse_str(event_type).unwrap();
+fn event_sender_arg(event_type: &syn::Path) -> FnArg {
+    let event_type_ident: syn::Type = syn::parse_quote!(#event_type);
     parse_quote!(tx: tokio::sync::mpsc::Sender<#event_type_ident>)
 }
 
@@ -52,13 +62,12 @@ fn update_progress_macro() -> TokenStream2 {
     }
 }
 
-fn abort_macro(error_event: &str) -> TokenStream2 {
-    let error_event_path: syn::Path = syn::parse_str(error_event).expect("Invalid error event variant");
+fn abort_macro(error_variant: &syn::Expr) -> TokenStream2 {
     quote! {
         macro_rules! abort {
             ($($arg:tt)*) => {
                 let message = format!($($arg)*);
-                let _ = tx.send(#error_event_path(message.clone())).await.inspect_err(|_| eprintln!("{}", message));
+                let _ = tx.send(#error_variant(message.clone())).await.inspect_err(|_| eprintln!("{}", message));
                 return;
             }
         }
@@ -66,13 +75,16 @@ fn abort_macro(error_event: &str) -> TokenStream2 {
 }
 
 #[derive(FromMeta)]
-struct TaskSpecArgs {
-    #[darling(default)]
-    callback: Option<String>,
-    #[darling(default)]
-    event_enum: Option<String>,
+struct EnumArgs {
+    event_enum: syn::Path,
 }
 
+#[derive(FromMeta)]
+struct VariantArgs {
+    callback: syn::Ident,
+}
+
+#[proc_macro_error]
 #[proc_macro_derive(BackgroundTaskSpec, attributes(taskspec))]
 pub fn background_task_spec_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -84,11 +96,16 @@ fn background_task_spec_impl(input: DeriveInput) -> TokenStream2 {
     
     // Parse the event_type from the derive macro arguments
     let event_type = extract_event_enum(&input.attrs);
-    let event_type_ident: syn::Type = syn::parse_str(&event_type).unwrap();
+    let event_type_ident: syn::Type = syn::parse_quote!(#event_type);
     
     let variants = match input.data {
         Data::Enum(data_enum) => data_enum.variants,
-        _ => panic!("BackgroundTaskSpec can only be derived for enums"),
+        _ => abort!(input.ident.span(), "BackgroundTaskSpec can only be derived for enums, found {}", 
+                   match input.data {
+                       Data::Struct(_) => "struct",
+                       Data::Union(_) => "union",
+                       _ => "unknown type",
+                   }),
     };
     
     let spawn_arms = variants.iter().map(|variant| {
@@ -127,7 +144,7 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
         }
         Fields::Unnamed(fields) => {
             let field_names: Vec<syn::Ident> = (0..fields.unnamed.len())
-                .map(|i| syn::Ident::new(&format!("field_{}", i), proc_macro2::Span::call_site()))
+                .map(|i| syn::Ident::new(&format!("field_{}", i), proc_macro2::Span::mixed_site()))
                 .collect();
             
             let pattern = quote! { Self::#variant_name(#(#field_names),*) };
@@ -144,8 +161,12 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
         }
         Fields::Named(fields) => {
             let field_names: Vec<&syn::Ident> = fields.named.iter()
-                .map(|f| f.ident.as_ref().unwrap())
+                .filter_map(|f| f.ident.as_ref())
                 .collect();
+            
+            if field_names.len() != fields.named.len() {
+                abort!(variant.ident.span(), "All named fields must have identifiers");
+            }
             
             let pattern = quote! { Self::#variant_name { #(#field_names),* } };
             let args = quote! { tx_clone, #(#field_names),* };
@@ -162,38 +183,42 @@ fn generate_spawn_arm(variant: &Variant) -> TokenStream2 {
     }
 }
 
-fn extract_event_enum(attrs: &[Attribute]) -> String {
+fn extract_event_enum(attrs: &[Attribute]) -> syn::Path {
     for attr in attrs {
         if attr.path().is_ident("taskspec") {
             if let Meta::List(meta_list) = &attr.meta {
-                let nested = NestedMeta::parse_meta_list(meta_list.tokens.clone())
-                    .expect("Invalid taskspec attribute");
-                let args = TaskSpecArgs::from_list(&nested)
-                    .expect("Invalid taskspec attribute");
-                if let Some(event_enum) = args.event_enum {
-                    return event_enum;
-                }
+                let nested = match NestedMeta::parse_meta_list(meta_list.tokens.clone()) {
+                    Ok(nested) => nested,
+                    Err(e) => abort!(attr.span(), "Invalid taskspec attribute syntax: {}", e),
+                };
+                let args = match EnumArgs::from_list(&nested) {
+                    Ok(args) => args,
+                    Err(e) => abort!(attr.span(), "Invalid taskspec attribute: {}", e),
+                };
+                return args.event_enum;
             }
         }
     }
-    panic!("Missing taskspec attribute with event_type parameter on enum");
+    abort!(proc_macro2::Span::mixed_site(), "Missing #[taskspec(event_enum = \"YourEventType\")] attribute on enum");
 }
 
 fn extract_callback_name(attrs: &[Attribute]) -> syn::Ident {
     for attr in attrs {
         if attr.path().is_ident("taskspec") {
             if let Meta::List(meta_list) = &attr.meta {
-                let nested = NestedMeta::parse_meta_list(meta_list.tokens.clone())
-                    .expect("Invalid taskspec attribute");
-                let args = TaskSpecArgs::from_list(&nested)
-                    .expect("Invalid taskspec attribute");
-                if let Some(callback) = args.callback {
-                    return syn::Ident::new(&callback, proc_macro2::Span::call_site());
-                }
+                let nested = match NestedMeta::parse_meta_list(meta_list.tokens.clone()) {
+                    Ok(nested) => nested,
+                    Err(e) => abort!(attr.span(), "Invalid taskspec attribute syntax: {}", e),
+                };
+                let args = match VariantArgs::from_list(&nested) {
+                    Ok(args) => args,
+                    Err(e) => abort!(attr.span(), "Invalid taskspec attribute: {}", e),
+                };
+                return args.callback;
             }
         }
     }
-    panic!("Missing taskspec attribute with callback parameter on variant");
+    abort!(proc_macro2::Span::mixed_site(), "Missing #[taskspec(callback = \"function_name\")] attribute on variant");
 }
 
 #[cfg(test)]

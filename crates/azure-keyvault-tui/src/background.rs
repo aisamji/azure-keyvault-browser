@@ -1,7 +1,7 @@
 use azure_keyvault_tui_macros::{BackgroundTaskSpec, background_task};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::tui::TuiEvent;
+use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
 
 /// Represents different types of background tasks that can be launched.
 ///
@@ -41,7 +41,7 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 }
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
-#[background_task(event_enum = "TuiEvent", error_event = "TuiEvent::SetErrorStatus")]
+#[background_task(event_enum = "TuiEvent", error_variant = "TuiEvent::SetErrorStatus")]
 async fn list_key_vaults(subscription_id: String) {
     // Show loading status
     update_progress!(TuiEvent::SetSuccessStatus(
@@ -50,7 +50,7 @@ async fn list_key_vaults(subscription_id: String) {
 
     // Get access token for the subscription
     let access_token =
-        match crate::azure_api::get_access_token_for_subscription(&subscription_id).await {
+        match get_access_token_for_subscription(&subscription_id).await {
             Ok(token) => token,
             Err(e) => {
                 abort!("Failed to get access token: {}", e);
