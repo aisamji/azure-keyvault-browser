@@ -50,18 +50,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Converting rustfmt to annotations requires some features only available in the nightly toolchain.
       - name: Install Rust nightly toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly
-          components: rustfmt, clippy
+          components: rustfmt
 
       - name: Cargo Fmt
         uses: clechasseur/rs-fmt-check@v2
 
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
       - name: Cargo Clippy
         uses: actions-rs/clippy-check@v1
         with:
+          toolchain: stable # This should use the same toolchain that is being used to build the project.
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --no-deps -- -D warnings
 
