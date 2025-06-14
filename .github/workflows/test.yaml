@@ -57,11 +57,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cargo Fmt
-        uses: loliGothicK/rustfmt-check@v0.5.0
-        continue-on-error: true
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          flags: --all
+        uses: actions-rust-lang/rustfmt@v1
 
       # - name: Cargo Clippy
       #   uses: actions-rs/clippy-check@v1
