@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  checks: write # Permissions to write check annotations
-  contents: read # Permissions needed for clippy-check and rustfmt-check
+  checks: write
+  contents: read
 
 concurrency:
-  group: test-${{ github.ref }}
+  group: test-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
