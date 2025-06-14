@@ -1,6 +1,26 @@
-- Design how I want secrets to be listed (columns, metadata, keymaps, etc.).
-- Figure out secret displays
-- Figure out editing mechanics for secrets.
+- Add screens for listing secrets, certificates, keys.
+  - Columns: name, Versions, creation date of latest version, status
+  - `<CR>` to view latest version of secret, etc.
+  - `e` to edit secret (i.e. create new version)
+  - `@` to view/select all secret versions
+  - `d` to delete secret.
+  - `n` to create new secret
+- Add versions screen
+  - Columns: id, creation date, status
+  - `<CR>` to view highlighted version of secret
+  - `e` to create new version, prepopulated with latest version
+  - `E` create new version, prepopulated with highlighted secret version
+  - `d` to deactivate/activate highlighted secret version
+  - `<ESC>` to go back to secret list.
+- Add display screen
+  - `<UP>/<DOWN>` for navigation
+  - `<ESC>` to go back
+  - `e` to create new version, prepopulated with displayed version.
+- Add capability to delete KeyVaults
+- Add capability to create KeyVaults.
+  - Would also need to add in management of RBAC (not sure if I want to support this).
+- Add capability to view secrets as key/value pairs
+- Add capability see/set secret metadata
 - Update subscription list to only show "Enabled" subscriptions.
 - Design how I want certificates to be listed (columns, metadata, keymaps, etc.).
 - Design how I want keys to be listed (columns, metadata, keymaps, etc.).

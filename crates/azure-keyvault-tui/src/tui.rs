@@ -11,6 +11,7 @@ use ratatui::{
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
+    azure_api::KeyVault,
     azure_profile::{AzureProfile, AzureSubscription},
     background::TaskSpec,
 };
@@ -45,11 +46,13 @@ pub enum TuiEvent {
     /// Represents an interactive event made by the user.
     TerminalEvent(Event),
     /// Key Vaults have been successfully loaded.
-    KeyVaultsLoaded(Vec<crate::azure_api::KeyVault>),
-    /// Sets the status message to display to the user.
-    SetStatusMessage(String),
-    /// Clears the current status message.
-    _ClearStatusMessage,
+    KeyVaultsLoaded(Vec<KeyVault>),
+    /// Sets a success status message to display to the user.
+    SetSuccessStatus(String),
+    /// Sets an error status message to display to the user.
+    SetErrorStatus(String),
+    /// Clears the current status.
+    _ClearStatus,
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -58,28 +61,28 @@ pub enum TuiEvent {
 /// Contains a `run` function that is used to start the main loop. The fields of this struct should
 /// not be modified by any threads other than the one executing [`Self::run`]. Any modification
 /// requests should be sent to the appropriate [`Sender`] channel.
-pub struct Tui {
+pub struct TuiState {
     /// List of all available subscriptions.
     subscriptions: Vec<AzureSubscription>,
-    /// Table state for subscriptions selection.
-    subscriptions_table_state: TableState,
-    /// Index of the currently active subscription.
-    selected_subscription_index: Option<usize>,
+    /// The currently selected subscription.
+    selected_subscription: Option<AzureSubscription>,
     /// List of loaded key vaults.
-    key_vaults: Vec<crate::azure_api::KeyVault>,
-    /// Table state for key vaults selection.
-    key_vaults_table_state: TableState,
+    key_vaults: Vec<KeyVault>,
     /// The currently activated key vault.
-    selected_key_vault: Option<crate::azure_api::KeyVault>,
+    selected_key_vault: Option<KeyVault>,
     /// The current screen being displayed.
     current_screen: Screen,
     /// Azure CLI version.
     azure_cli_version: String,
-    /// Current status message to display to the user.
-    status_message: Option<String>,
+    /// Current status to display to the user.
+    status: Option<Result<String, String>>,
+
+    // States for Widgets
+    /// Table state for table selections.
+    table_state: TableState,
 }
 
-impl Default for Tui {
+impl Default for TuiState {
     fn default() -> Self {
         // Get Azure CLI version first, crash if not available
         let azure_cli_version = AzureProfile::get_azure_cli_version().unwrap_or_else(|e| {
@@ -92,15 +95,10 @@ impl Default for Tui {
             .map(|ap| ap.subscriptions)
             .unwrap_or_default();
 
-        let selected_subscription_index = subscriptions.iter().position(|s| s.is_default);
+        let selected_subscription = subscriptions.iter().find(|s| s.is_default).cloned();
 
         // Initialize subscriptions table state with default selection if available
-        let mut subscriptions_table_state = TableState::default();
-        if let Some(default_index) = selected_subscription_index {
-            subscriptions_table_state.select(Some(default_index));
-        }
-
-        let current_screen = if selected_subscription_index.is_some() {
+        let current_screen = if selected_subscription.is_some() {
             Screen::KeyVaults
         } else {
             Screen::Subscriptions
@@ -108,19 +106,18 @@ impl Default for Tui {
 
         Self {
             subscriptions,
-            subscriptions_table_state,
-            selected_subscription_index,
+            selected_subscription,
             key_vaults: Vec::new(),
-            key_vaults_table_state: TableState::default(),
+            table_state: TableState::default(),
             selected_key_vault: None,
             current_screen,
             azure_cli_version,
-            status_message: None,
+            status: None,
         }
     }
 }
 
-impl Tui {
+impl TuiState {
     /// Redraws the terminal every time a [`TuiEvent`] is received.
     ///
     /// Be sure to only call this function with [`tokio::task::spawn_blocking`]. This function
@@ -137,10 +134,7 @@ impl Tui {
         tx_bg_task: Sender<TaskSpec>,
     ) -> io::Result<()> {
         // Trigger initial Key Vault listing if we have a default subscription
-        if let Some(subscription) = self
-            .selected_subscription_index
-            .and_then(|idx| self.subscriptions.get(idx))
-        {
+        if let Some(subscription) = &self.selected_subscription {
             let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                 subscription_id: subscription.id.clone(),
             });
@@ -159,14 +153,17 @@ impl Tui {
                     }
                     TuiEvent::KeyVaultsLoaded(key_vaults) => {
                         self.key_vaults = key_vaults;
-                        self.status_message =
-                            Some(format!("Loaded {} key vaults", self.key_vaults.len()));
+                        self.status =
+                            Some(Ok(format!("Loaded {} key vaults", self.key_vaults.len())));
                     }
-                    TuiEvent::SetStatusMessage(message) => {
-                        self.status_message = Some(message);
+                    TuiEvent::SetSuccessStatus(message) => {
+                        self.status = Some(Ok(message));
                     }
-                    TuiEvent::_ClearStatusMessage => {
-                        self.status_message = None;
+                    TuiEvent::SetErrorStatus(message) => {
+                        self.status = Some(Err(message));
+                    }
+                    TuiEvent::_ClearStatus => {
+                        self.status = None;
                     }
                 },
                 // If all senders of TuiEvents have somehow been closed, we should kill this thread as well.
@@ -198,15 +195,12 @@ impl Tui {
         let [metadata_area, global_keymaps_area, _local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
-        let current_subscription = self
-            .selected_subscription_index
-            .and_then(|idx| self.subscriptions.get(idx));
-
         let metadata = Text::from(vec![
             Line::from(vec![
                 Span::from("Tenant ID: ").bold(),
                 Span::from(
-                    current_subscription
+                    self.selected_subscription
+                        .as_ref()
                         .map(|s| s.tenant_id.as_str())
                         .unwrap_or("None"),
                 ),
@@ -214,7 +208,8 @@ impl Tui {
             Line::from(vec![
                 Span::from("Subscription: ").bold(),
                 Span::from(
-                    current_subscription
+                    self.selected_subscription
+                        .as_ref()
                         .map(|s| format!("{} ({})", s.name, s.id))
                         .unwrap_or("None".to_string()),
                 ),
@@ -274,85 +269,22 @@ impl Tui {
         // Render Body based on current screen
         match self.current_screen {
             Screen::KeyVaults => {
-                let header = Row::new(vec![
-                    Cell::from("Name").style(Style::default().bold()),
-                    Cell::from("Resource Group").style(Style::default().bold()),
-                ]);
-
-                let rows: Vec<Row> = self
-                    .key_vaults
-                    .iter()
-                    .map(|key_vault| {
-                        Row::new(vec![
-                            Cell::from(key_vault.name.clone()),
-                            Cell::from(key_vault.resource_group()),
-                        ])
-                    })
-                    .collect();
-
-                let table = Table::new(rows, [Constraint::Fill(1), Constraint::Fill(1)])
-                    .header(header)
-                    .block(
-                        Block::new()
-                            .borders(Borders::all())
-                            .title_alignment(Alignment::Center)
-                            .title(Line::from(" Key Vaults ")),
-                    )
-                    .row_highlight_style(Style::default().bg(Color::Blue));
-
-                frame.render_stateful_widget(table, body_area, &mut self.key_vaults_table_state);
+                let table = keyvaults_as_table(self.key_vaults.as_slice());
+                frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
             Screen::Subscriptions => {
-                let header = Row::new(vec![
-                    Cell::from("Name").style(Style::default().bold()),
-                    Cell::from("ID").style(Style::default().bold()),
-                    Cell::from("Tenant ID").style(Style::default().bold()),
-                    Cell::from("Auth").style(Style::default().bold()),
-                ]);
-
-                let rows: Vec<Row> = self
-                    .subscriptions
-                    .iter()
-                    .map(|subscription| {
-                        Row::new(vec![
-                            Cell::from(subscription.name.clone()),
-                            Cell::from(subscription.id.clone()),
-                            Cell::from(subscription.tenant_id.clone()),
-                            Cell::from(subscription.user.to_string()),
-                        ])
-                    })
-                    .collect();
-
-                let table = Table::new(
-                    rows,
-                    [
-                        Constraint::Fill(2),
-                        Constraint::Fill(3),
-                        Constraint::Fill(3),
-                        Constraint::Fill(2),
-                    ],
-                )
-                .header(header)
-                .block(
-                    Block::new()
-                        .borders(Borders::all())
-                        .title_alignment(Alignment::Center)
-                        .title(Line::from(" Subscriptions ")),
-                )
-                .row_highlight_style(Style::default().bg(Color::Blue));
-
-                frame.render_stateful_widget(table, body_area, &mut self.subscriptions_table_state);
+                let table = subscriptions_as_table(self.subscriptions.as_slice());
+                frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
         }
 
         // Render Status Bar
-        if let Some(ref status_text) = self.status_message {
-            let status_style = if status_text.contains("Error") {
-                Style::default().fg(Color::Red)
-            } else {
-                Style::default().fg(Color::Green)
+        if let Some(ref status_result) = self.status {
+            let (status_text, status_style) = match status_result {
+                Ok(text) => (text.as_str(), Style::default().fg(Color::Green)),
+                Err(text) => (text.as_str(), Style::default().fg(Color::Red)),
             };
-            let status_paragraph = Paragraph::new(status_text.as_str())
+            let status_paragraph = Paragraph::new(status_text)
                 .style(status_style)
                 .wrap(Wrap { trim: true });
             frame.render_widget(status_paragraph, status_area);
@@ -372,86 +304,41 @@ impl Tui {
                     return true;
                 }
                 KeyCode::Char('S') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
-                    // Switch to subscriptions screen
-                    self.current_screen = Screen::Subscriptions;
-                    self.status_message = None;
+                    self.load_screen(Screen::Subscriptions, tx_bg_task);
                 }
                 KeyCode::Char('K') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
-                    // Switch to key vaults screen
-                    self.current_screen = Screen::KeyVaults;
-                    self.status_message = None;
-
-                    // Trigger key vault loading if we have a selected subscription
-                    if let Some(subscription) = self
-                        .selected_subscription_index
-                        .and_then(|idx| self.subscriptions.get(idx))
-                    {
-                        let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
-                            subscription_id: subscription.id.clone(),
-                        });
-                    } else {
-                        self.status_message = Some(
-                            "No subscription selected. Please select a subscription first."
-                                .to_string(),
-                        );
-                    }
+                    self.load_screen(Screen::KeyVaults, tx_bg_task);
                 }
                 KeyCode::Up => match self.current_screen {
-                    Screen::KeyVaults => {
-                        if !self.key_vaults.is_empty() {
-                            self.key_vaults_table_state.select_previous();
-                        }
-                    }
-                    Screen::Subscriptions => {
-                        if !self.subscriptions.is_empty() {
-                            self.subscriptions_table_state.select_previous();
-                        }
+                    Screen::KeyVaults | Screen::Subscriptions => {
+                        self.table_state.select_previous();
                     }
                 },
                 KeyCode::Down => match self.current_screen {
-                    Screen::KeyVaults => {
-                        if !self.key_vaults.is_empty() {
-                            self.key_vaults_table_state.select_next();
-                        }
-                    }
-                    Screen::Subscriptions => {
-                        if !self.subscriptions.is_empty() {
-                            self.subscriptions_table_state.select_next();
-                        }
+                    Screen::KeyVaults | Screen::Subscriptions => {
+                        self.table_state.select_next();
                     }
                 },
                 KeyCode::Enter => {
                     match self.current_screen {
                         Screen::KeyVaults => {
-                            if let Some(selected_index) = self.key_vaults_table_state.selected() {
+                            if let Some(selected_index) = self.table_state.selected() {
                                 if let Some(key_vault) = self.key_vaults.get(selected_index) {
                                     self.selected_key_vault = Some(key_vault.clone());
-                                    self.status_message =
-                                        Some(format!("Activated Key Vault: {}", key_vault.name));
+                                    self.status = Some(Ok(format!(
+                                        "Activated Key Vault: {}",
+                                        key_vault.name
+                                    )));
                                     // TODO: Automatically switch to Secrets screen.
                                 }
                             }
                         }
                         Screen::Subscriptions => {
-                            if let Some(selected_index) = self.subscriptions_table_state.selected()
-                            {
+                            if let Some(selected_index) = self.table_state.selected() {
                                 if let Some(subscription) = self.subscriptions.get(selected_index) {
-                                    // Clear selected key vault when switching subscriptions
+                                    self.selected_subscription = Some(subscription.clone());
                                     self.selected_key_vault = None;
-                                    self.key_vaults = vec![];
-                                    self.key_vaults_table_state = TableState::default();
-
-                                    // Update the active subscription
-                                    self.selected_subscription_index = Some(selected_index);
-
-                                    // Switch to key vaults screen
-                                    self.current_screen = Screen::KeyVaults;
-                                    self.status_message = None;
-
-                                    // Trigger key vault loading for the new subscription
-                                    let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
-                                        subscription_id: subscription.id.clone(),
-                                    });
+                                    self.load_screen(Screen::KeyVaults, tx_bg_task);
                                 }
                             }
                         }
@@ -468,4 +355,99 @@ impl Tui {
 
         false
     }
+
+    /// Switch to the given [`Screen`], loading data as necessary.
+    ///
+    /// Launches a background task to load the data asynchronously.
+    fn load_screen(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
+        self.current_screen = screen.clone();
+        self.status = None;
+
+        // Load new list for table/screen.
+        match screen {
+            Screen::KeyVaults => {
+                // Trigger key vault loading if we have a selected subscription
+                if let Some(subscription) = &self.selected_subscription {
+                    self.key_vaults = vec![];
+                    self.table_state = TableState::default();
+                    let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+                        subscription_id: subscription.id.clone(),
+                    });
+                } else {
+                    self.status = Some(Err(
+                        "No subscription selected. Please select a subscription first.".to_string(),
+                    ));
+                }
+            }
+            Screen::Subscriptions => {
+                // No need to load anything, the file is cached upon startup.
+            }
+        }
+    }
+}
+
+fn subscriptions_as_table(subscriptions: &[AzureSubscription]) -> Table<'_> {
+    let header = Row::new(vec![
+        Cell::from("Name").style(Style::default().bold()),
+        Cell::from("ID").style(Style::default().bold()),
+        Cell::from("Tenant ID").style(Style::default().bold()),
+        Cell::from("Auth").style(Style::default().bold()),
+    ]);
+
+    let rows: Vec<Row> = subscriptions
+        .iter()
+        .map(|subscription| {
+            Row::new(vec![
+                Cell::from(subscription.name.clone()),
+                Cell::from(subscription.id.clone()),
+                Cell::from(subscription.tenant_id.clone()),
+                Cell::from(subscription.user.to_string()),
+            ])
+        })
+        .collect();
+
+    Table::new(
+        rows,
+        [
+            Constraint::Fill(2),
+            Constraint::Fill(3),
+            Constraint::Fill(3),
+            Constraint::Fill(2),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::new()
+            .borders(Borders::all())
+            .title_alignment(Alignment::Center)
+            .title(Line::from(" Subscriptions ")),
+    )
+    .row_highlight_style(Style::default().bg(Color::Blue))
+}
+
+fn keyvaults_as_table(keyvaults: &[KeyVault]) -> Table<'_> {
+    let header = Row::new(vec![
+        Cell::from("Name").style(Style::default().bold()),
+        Cell::from("Resource Group").style(Style::default().bold()),
+    ]);
+
+    let rows: Vec<Row> = keyvaults
+        .iter()
+        .map(|key_vault| {
+            Row::new(vec![
+                Cell::from(key_vault.name.clone()),
+                Cell::from(key_vault.resource_group()),
+            ])
+        })
+        .collect();
+
+    Table::new(rows, [Constraint::Fill(1), Constraint::Fill(1)])
+        .header(header)
+        .block(
+            Block::new()
+                .borders(Borders::all())
+                .title_alignment(Alignment::Center)
+                .title(Line::from(" Key Vaults ")),
+        )
+        .row_highlight_style(Style::default().bg(Color::Blue))
 }

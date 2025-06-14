@@ -1,0 +1,18 @@
+[package]
+name = "azure-keyvault-tui-macros"
+description = "Macros for the azure-keyvault-tui crate."
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
+syn = "2.0.102"
+darling = "0.20"
+proc-macro-error = "1.0"
