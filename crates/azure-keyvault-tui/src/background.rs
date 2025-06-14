@@ -1,7 +1,6 @@
-
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::tui::TuiEvent;
+use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
 
 /// Represents different types of background tasks that can be launched.
 ///
@@ -42,15 +41,25 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 }
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
-async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) -> Result<(), tokio::sync::mpsc::error::SendError<TuiEvent>> {
+async fn list_key_vaults(
+    tx: Sender<TuiEvent>,
+    subscription_id: String,
+) -> Result<(), tokio::sync::mpsc::error::SendError<TuiEvent>> {
     // Show loading status
-    tx.send(TuiEvent::SetStatusMessage("Loading Key Vaults...".to_string())).await?;
+    tx.send(TuiEvent::SetStatusMessage(
+        "Loading Key Vaults...".to_string(),
+    ))
+    .await?;
 
     // Get access token for the subscription
-    let access_token = match crate::azure_api::get_access_token_for_subscription(&subscription_id).await {
+    let access_token = match get_access_token_for_subscription(&subscription_id).await {
         Ok(token) => token,
         Err(e) => {
-            tx.send(TuiEvent::SetStatusMessage(format!("Failed to get access token: {}", e))).await?;
+            tx.send(TuiEvent::SetStatusMessage(format!(
+                "Failed to get access token: {}",
+                e
+            )))
+            .await?;
             return Ok(());
         }
     };
@@ -61,7 +70,11 @@ async fn list_key_vaults(tx: Sender<TuiEvent>, subscription_id: String) -> Resul
             tx.send(TuiEvent::KeyVaultsLoaded(key_vaults)).await?;
         }
         Err(e) => {
-            tx.send(TuiEvent::SetStatusMessage(format!("Failed to load Key Vaults: {}", e))).await?;
+            tx.send(TuiEvent::SetStatusMessage(format!(
+                "Failed to load Key Vaults: {}",
+                e
+            )))
+            .await?;
         }
     }
 

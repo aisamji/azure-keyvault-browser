@@ -49,7 +49,7 @@ pub enum TuiEvent {
     /// Sets the status message to display to the user.
     SetStatusMessage(String),
     /// Clears the current status message.
-    ClearStatusMessage,
+    _ClearStatusMessage,
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -165,7 +165,7 @@ impl Tui {
                     TuiEvent::SetStatusMessage(message) => {
                         self.status_message = Some(message);
                     }
-                    TuiEvent::ClearStatusMessage => {
+                    TuiEvent::_ClearStatusMessage => {
                         self.status_message = None;
                     }
                 },
@@ -195,7 +195,7 @@ impl Tui {
             Constraint::Fill(1),
             Constraint::Fill(1),
         ]);
-        let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
+        let [metadata_area, global_keymaps_area, _local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
         let current_subscription = self
@@ -396,34 +396,30 @@ impl Tui {
                         );
                     }
                 }
-                KeyCode::Up => {
-                    match self.current_screen {
-                        Screen::KeyVaults => {
-                            if !self.key_vaults.is_empty() {
-                                self.key_vaults_table_state.select_previous();
-                            }
-                        }
-                        Screen::Subscriptions => {
-                            if !self.subscriptions.is_empty() {
-                                self.subscriptions_table_state.select_previous();
-                            }
+                KeyCode::Up => match self.current_screen {
+                    Screen::KeyVaults => {
+                        if !self.key_vaults.is_empty() {
+                            self.key_vaults_table_state.select_previous();
                         }
                     }
-                }
-                KeyCode::Down => {
-                    match self.current_screen {
-                        Screen::KeyVaults => {
-                            if !self.key_vaults.is_empty() {
-                                self.key_vaults_table_state.select_next();
-                            }
-                        }
-                        Screen::Subscriptions => {
-                            if !self.subscriptions.is_empty() {
-                                self.subscriptions_table_state.select_next();
-                            }
+                    Screen::Subscriptions => {
+                        if !self.subscriptions.is_empty() {
+                            self.subscriptions_table_state.select_previous();
                         }
                     }
-                }
+                },
+                KeyCode::Down => match self.current_screen {
+                    Screen::KeyVaults => {
+                        if !self.key_vaults.is_empty() {
+                            self.key_vaults_table_state.select_next();
+                        }
+                    }
+                    Screen::Subscriptions => {
+                        if !self.subscriptions.is_empty() {
+                            self.subscriptions_table_state.select_next();
+                        }
+                    }
+                },
                 KeyCode::Enter => {
                     match self.current_screen {
                         Screen::KeyVaults => {
@@ -437,20 +433,21 @@ impl Tui {
                             }
                         }
                         Screen::Subscriptions => {
-                            if let Some(selected_index) = self.subscriptions_table_state.selected() {
+                            if let Some(selected_index) = self.subscriptions_table_state.selected()
+                            {
                                 if let Some(subscription) = self.subscriptions.get(selected_index) {
                                     // Clear selected key vault when switching subscriptions
                                     self.selected_key_vault = None;
                                     self.key_vaults = vec![];
                                     self.key_vaults_table_state = TableState::default();
-                                    
+
                                     // Update the active subscription
                                     self.selected_subscription_index = Some(selected_index);
-                                    
+
                                     // Switch to key vaults screen
                                     self.current_screen = Screen::KeyVaults;
                                     self.status_message = None;
-                                    
+
                                     // Trigger key vault loading for the new subscription
                                     let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
                                         subscription_id: subscription.id.clone(),
@@ -469,6 +466,6 @@ impl Tui {
             }
         }
 
-        return false;
+        false
     }
 }
