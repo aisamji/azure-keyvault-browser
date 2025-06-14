@@ -47,6 +47,9 @@ jobs:
     # needs: validate  # First make it works, then worry about code quality.
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Rust nightly toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
