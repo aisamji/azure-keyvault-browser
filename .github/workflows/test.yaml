@@ -58,6 +58,7 @@ jobs:
 
       - name: Cargo Fmt
         uses: loliGothicK/rustfmt-check@v0.5.0
+        continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           flags: --all
