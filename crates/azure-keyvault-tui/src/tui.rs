@@ -49,7 +49,7 @@ pub enum TuiEvent {
     /// Sets the status message to display to the user.
     SetStatusMessage(String),
     /// Clears the current status message.
-    ClearStatusMessage,
+    _ClearStatusMessage,
 }
 
 // All state mutations should be done in the run method only to avoid deadlocks.
@@ -165,7 +165,7 @@ impl Tui {
                     TuiEvent::SetStatusMessage(message) => {
                         self.status_message = Some(message);
                     }
-                    TuiEvent::ClearStatusMessage => {
+                    TuiEvent::_ClearStatusMessage => {
                         self.status_message = None;
                     }
                 },
@@ -195,7 +195,7 @@ impl Tui {
             Constraint::Fill(1),
             Constraint::Fill(1),
         ]);
-        let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
+        let [metadata_area, global_keymaps_area, _local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
         let current_subscription = self
@@ -466,6 +466,6 @@ impl Tui {
             }
         }
 
-        return false;
+        false
     }
 }

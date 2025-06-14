@@ -37,7 +37,7 @@ impl AzureProfile {
             .filter_map(|x| {
                 // Ignore undisplayable bytes, otherwise convert them into the equivalent char.
                 if x.is_ascii_alphanumeric() || x.is_ascii_punctuation() {
-                    Some((x.clone() as char).into())
+                    Some((*x as char).into())
                 } else {
                     None
                 }
@@ -84,11 +84,11 @@ impl AzureProfile {
 pub struct AzureSubscription {
     pub id: String,
     pub name: String,
-    pub state: String,
+    pub _state: String,
     pub user: AzureCredential,
     pub is_default: bool,
     pub tenant_id: String,
-    pub environment_name: String,
+    pub _environment_name: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
