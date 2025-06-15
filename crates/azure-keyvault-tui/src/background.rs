@@ -1,4 +1,4 @@
-use azure_keyvault_tui_macros::{BackgroundTaskSpec, background_task};
+use azure_keyvault_tui_macros::{TaskSpec, background_task};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
@@ -7,9 +7,9 @@ use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
 ///
 /// Each [`TaskSpec`] contains the necessary parameters and other information to be able to call
 /// the function associated with the specified background task.
-#[derive(BackgroundTaskSpec)]
-#[taskspec(event_enum = "TuiEvent")]
-pub enum TaskSpec {
+#[derive(TaskSpec)]
+#[taskspec(message_type = "TuiEvent")]
+pub enum BackgroundTask {
     /// Lists Key Vaults for the given subscription ID.
     #[taskspec(callback = "list_key_vaults")]
     ListKeyVaults { subscription_id: String },
@@ -20,7 +20,7 @@ pub enum TaskSpec {
 /// Continously launches new tokio tasks based on the [`TaskSpec`] receieved from the given
 /// [`Receiver`]. Passes a clone of the given [`Sender`] to the launched background tasks so the
 /// background tasks can send messages to the TUI thread to request state modifications.
-pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<TuiEvent>) {
+pub async fn manager(mut rx_bg_task: Receiver<BackgroundTask>, tx_tui_event: Sender<TuiEvent>) {
     let mut spawned_tasks = vec![];
     // Stay alive only while main thread is alive
     while let Some(task_spec) = rx_bg_task.recv().await {
@@ -42,7 +42,7 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 }
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
-#[background_task(event_enum = "TuiEvent", error_variant = "TuiEvent::SetErrorStatus")]
+#[background_task(message_type = "TuiEvent", abort_with = "TuiEvent::SetErrorStatus")]
 async fn list_key_vaults(subscription_id: String) {
     // Show loading status
     notify!(TuiEvent::SetSuccessStatus(

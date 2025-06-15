@@ -13,7 +13,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::{
     azure_api::KeyVault,
     azure_profile::{AzureProfile, AzureSubscription},
-    background::TaskSpec,
+    background::BackgroundTask,
 };
 
 /// Represents the different screens/views available in the TUI.
@@ -131,11 +131,11 @@ impl TuiState {
         &mut self,
         terminal: &mut DefaultTerminal,
         mut rx: Receiver<TuiEvent>,
-        tx_bg_task: Sender<TaskSpec>,
+        tx_bg_task: Sender<BackgroundTask>,
     ) -> io::Result<()> {
         // Trigger initial Key Vault listing if we have a default subscription
         if let Some(subscription) = &self.selected_subscription {
-            let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+            let _ = tx_bg_task.blocking_send(BackgroundTask::ListKeyVaults {
                 subscription_id: subscription.id.clone(),
             });
         }
@@ -296,7 +296,11 @@ impl TuiState {
     /// A private helper function that mutates the app's internal state or launches a background
     /// task by using the given [`Sender`]. Returns a value indicating whether the TUI should quit.
     /// Blockuse the current app state to determine what action to take in response to the [`Event`].
-    fn process_terminal_event(&mut self, event: &Event, tx_bg_task: &Sender<TaskSpec>) -> bool {
+    fn process_terminal_event(
+        &mut self,
+        event: &Event,
+        tx_bg_task: &Sender<BackgroundTask>,
+    ) -> bool {
         match event {
             Event::Key(key_event) => match key_event.code {
                 KeyCode::Char('q') => {
@@ -359,7 +363,7 @@ impl TuiState {
     /// Switch to the given [`Screen`], loading data as necessary.
     ///
     /// Launches a background task to load the data asynchronously.
-    fn load_screen(&mut self, screen: Screen, tx_bg_task: &Sender<TaskSpec>) {
+    fn load_screen(&mut self, screen: Screen, tx_bg_task: &Sender<BackgroundTask>) {
         self.current_screen = screen.clone();
         self.status = None;
 
@@ -370,7 +374,7 @@ impl TuiState {
                 if let Some(subscription) = &self.selected_subscription {
                     self.key_vaults = vec![];
                     self.table_state = TableState::default();
-                    let _ = tx_bg_task.blocking_send(TaskSpec::ListKeyVaults {
+                    let _ = tx_bg_task.blocking_send(BackgroundTask::ListKeyVaults {
                         subscription_id: subscription.id.clone(),
                     });
                 } else {

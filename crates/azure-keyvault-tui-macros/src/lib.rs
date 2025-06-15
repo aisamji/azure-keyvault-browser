@@ -10,8 +10,8 @@ use syn::{
 
 #[derive(FromMeta)]
 struct CallbackArgs {
-    event_enum: Option<syn::Path>,
-    error_variant: Option<syn::Expr>,
+    message_type: Option<syn::Path>,
+    abort_with: Option<syn::Expr>,
 }
 
 #[proc_macro_error]
@@ -31,18 +31,21 @@ pub fn background_task(args: TokenStream, item: TokenStream) -> TokenStream {
 
 fn background_task_impl(mut function: ItemFn, args: CallbackArgs) -> TokenStream2 {
     // Only add event sender parameter if event_enum is specified
-    if let Some(ref event_enum) = args.event_enum {
-        function.sig.inputs.insert(0, event_sender_arg(event_enum));
+    if let Some(ref message_type) = args.message_type {
+        function
+            .sig
+            .inputs
+            .insert(0, event_sender_arg(message_type));
     }
 
-    let notify_macro = if args.event_enum.is_some() {
+    let notify_macro = if args.message_type.is_some() {
         notify_macro()
     } else {
         eprintln_notify_macro()
     };
 
-    let abort_macro = if let Some(ref error_variant) = args.error_variant {
-        abort_macro(error_variant)
+    let abort_macro = if let Some(ref abort_with) = args.abort_with {
+        abort_macro(abort_with)
     } else {
         eprintln_abort_macro()
     };
@@ -92,13 +95,13 @@ fn eprintln_notify_macro() -> TokenStream2 {
     }
 }
 
-fn abort_macro(error_variant: &syn::Expr) -> TokenStream2 {
+fn abort_macro(abort_with: &syn::Expr) -> TokenStream2 {
     quote! {
         macro_rules! abort {
             ($($arg:tt)*) => {
                 {
                     let message = format!($($arg)*);
-                    let _ = tx.send(#error_variant(message.clone())).await.inspect_err(|_| eprintln!("{}", message));
+                    let _ = tx.send(#abort_with(message.clone())).await.inspect_err(|_| eprintln!("{}", message));
                     return;
                 }
             }
@@ -121,7 +124,7 @@ fn eprintln_abort_macro() -> TokenStream2 {
 
 #[derive(FromMeta)]
 struct EnumArgs {
-    event_enum: syn::Path,
+    message_type: syn::Path,
 }
 
 #[derive(FromMeta)]
@@ -130,23 +133,23 @@ struct VariantArgs {
 }
 
 #[proc_macro_error]
-#[proc_macro_derive(BackgroundTaskSpec, attributes(taskspec))]
-pub fn background_task_spec_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(TaskSpec, attributes(taskspec))]
+pub fn task_spec_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    background_task_spec_impl(input).into()
+    task_spec_impl(input).into()
 }
 
-fn background_task_spec_impl(input: DeriveInput) -> TokenStream2 {
+fn task_spec_impl(input: DeriveInput) -> TokenStream2 {
     let enum_name = &input.ident;
 
     // Parse the event_type from the derive macro arguments
-    let event_type = extract_event_enum(&input.attrs);
+    let event_type = extract_message_type(&input.attrs);
 
     let variants = match input.data {
         Data::Enum(data_enum) => data_enum.variants,
         _ => abort!(
             input.ident.span(),
-            "BackgroundTaskSpec can only be derived for enums, found {}",
+            "TaskSpec can only be derived for enums, found {}",
             match input.data {
                 Data::Struct(_) => "struct",
                 Data::Union(_) => "union",
@@ -305,7 +308,7 @@ fn generate_spawn_arm(variant: &Variant, has_sender: bool) -> TokenStream2 {
     }
 }
 
-fn extract_event_enum(attrs: &[Attribute]) -> Option<syn::Path> {
+fn extract_message_type(attrs: &[Attribute]) -> Option<syn::Path> {
     for attr in attrs {
         if attr.path().is_ident("taskspec") {
             if let Meta::List(meta_list) = &attr.meta {
@@ -317,7 +320,7 @@ fn extract_event_enum(attrs: &[Attribute]) -> Option<syn::Path> {
                     Ok(args) => args,
                     Err(e) => abort!(attr.span(), "Invalid taskspec attribute: {}", e),
                 };
-                return Some(args.event_enum);
+                return Some(args.message_type);
             }
         }
     }
