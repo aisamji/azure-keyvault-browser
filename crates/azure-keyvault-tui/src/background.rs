@@ -27,8 +27,9 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
         // Spawn a new task or thread for new BackgroundTasks and add them to the Vec to keep track
         // of them.
         // TODO: There might be a better way to keep track of them.
-        let handle = task_spec.spawn_task(&tx_tui_event);
-        spawned_tasks.push(handle);
+        if let Some(handle) = task_spec.spawn_task(&tx_tui_event) {
+            spawned_tasks.push(handle);
+        }
     }
 
     // Wait for all background tasks to finish.
@@ -44,7 +45,7 @@ pub async fn manager(mut rx_bg_task: Receiver<TaskSpec>, tx_tui_event: Sender<Tu
 #[background_task(event_enum = "TuiEvent", error_variant = "TuiEvent::SetErrorStatus")]
 async fn list_key_vaults(subscription_id: String) {
     // Show loading status
-    update_progress!(TuiEvent::SetSuccessStatus(
+    notify!(TuiEvent::SetSuccessStatus(
         "Loading Key Vaults...".to_string(),
     ));
 
@@ -58,11 +59,7 @@ async fn list_key_vaults(subscription_id: String) {
 
     // List key vaults using the token
     match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {
-        Ok(key_vaults) => {
-            update_progress!(TuiEvent::KeyVaultsLoaded(key_vaults));
-        }
-        Err(e) => {
-            abort!("Failed to load Key Vaults: {}", e);
-        }
+        Ok(key_vaults) => notify!(TuiEvent::KeyVaultsLoaded(key_vaults)),
+        Err(e) => abort!("Failed to load Key Vaults: {}", e),
     }
 }
