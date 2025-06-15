@@ -135,7 +135,7 @@ impl TuiState {
     ) -> io::Result<()> {
         // Trigger initial Key Vault listing if we have a default subscription
         if let Some(subscription) = &self.selected_subscription {
-            let _ = tx_bg_task.blocking_send(BackgroundTask::ListKeyVaults {
+            let _ = tx_bg_task.blocking_send(BackgroundTask::LoadKeyVaults {
                 subscription_id: subscription.id.clone(),
             });
         }
@@ -374,7 +374,7 @@ impl TuiState {
                 if let Some(subscription) = &self.selected_subscription {
                     self.key_vaults = vec![];
                     self.table_state = TableState::default();
-                    let _ = tx_bg_task.blocking_send(BackgroundTask::ListKeyVaults {
+                    let _ = tx_bg_task.blocking_send(BackgroundTask::LoadKeyVaults {
                         subscription_id: subscription.id.clone(),
                     });
                 } else {

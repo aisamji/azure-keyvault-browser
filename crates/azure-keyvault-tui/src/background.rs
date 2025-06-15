@@ -1,7 +1,7 @@
 use azure_keyvault_tui_macros::{TaskSpec, background_task};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
+use crate::{azure_api::{get_access_token_for_subscription, list_key_vaults}, tui::TuiEvent};
 
 /// Represents different types of background tasks that can be launched.
 ///
@@ -11,8 +11,8 @@ use crate::{azure_api::get_access_token_for_subscription, tui::TuiEvent};
 #[taskspec(message_type = "TuiEvent")]
 pub enum BackgroundTask {
     /// Lists Key Vaults for the given subscription ID.
-    #[taskspec(callback = "list_key_vaults")]
-    ListKeyVaults { subscription_id: String },
+    #[taskspec(callback = "load_key_vaults")]
+    LoadKeyVaults { subscription_id: String },
 }
 
 /// Launches requested tasks in the background and waits for tasks to finish before exiting.
@@ -43,7 +43,7 @@ pub async fn manager(mut rx_bg_task: Receiver<BackgroundTask>, tx_tui_event: Sen
 
 /// Lists Key Vaults for the given subscription and sends the result to the TUI.
 #[background_task(message_type = "TuiEvent", abort_with = "TuiEvent::SetErrorStatus")]
-async fn list_key_vaults(subscription_id: String) {
+async fn load_key_vaults(subscription_id: String) {
     // Show loading status
     notify!(TuiEvent::SetSuccessStatus(
         "Loading Key Vaults...".to_string(),
@@ -58,7 +58,7 @@ async fn list_key_vaults(subscription_id: String) {
     };
 
     // List key vaults using the token
-    match crate::azure_api::list_key_vaults(&subscription_id, &access_token).await {
+    match list_key_vaults(&subscription_id, &access_token).await {
         Ok(key_vaults) => notify!(TuiEvent::KeyVaultsLoaded(key_vaults)),
         Err(e) => abort!("Failed to load Key Vaults: {}", e),
     }
