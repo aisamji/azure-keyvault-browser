@@ -1,7 +1,7 @@
 [package]
 name = "azure-keyvault-tui"
 description = "A TUI application to manage data across multiple Azure KeyVaults."
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors.workspace = true
 license-file.workspace = true
