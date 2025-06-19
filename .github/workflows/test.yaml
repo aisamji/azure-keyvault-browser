@@ -34,6 +34,8 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build  # Use a shared-key to allow sharing the cache with other jobs on the same os/arch.
 
       - name: Cargo Check
         run: cargo check --all-features --keep-going
