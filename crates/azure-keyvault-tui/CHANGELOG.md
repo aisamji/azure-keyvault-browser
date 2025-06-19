@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/aisamji/azure-keyvault-tui/compare/azure-keyvault-tui-v0.1.1...azure-keyvault-tui-v0.1.2) - 2025-06-19
+
+### Other
+
+- refactor/generic macros ([#26](https://github.com/aisamji/azure-keyvault-tui/pull/26))
+
 ## [0.1.1](https://github.com/aisamji/azure-keyvault-tui/compare/azure-keyvault-tui-v0.1.0...azure-keyvault-tui-v0.1.1) - 2025-06-14
 
 ### Other
