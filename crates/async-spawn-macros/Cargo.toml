@@ -1,11 +1,12 @@
 [package]
-name = "azure-keyvault-tui-macros"
-description = "Macros for the azure-keyvault-tui crate."
+name = "async-spawn-macros"
+description = "Generic macros for async task spawning and management."
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
 license-file.workspace = true
 repository.workspace = true
+publish = false
 
 [lib]
 proc-macro = true

@@ -119,6 +119,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-spawn-macros"
+version = "0.1.0"
+dependencies = [
+ "darling",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.102",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -146,7 +157,7 @@ name = "azure-keyvault-tui"
 version = "0.1.1"
 dependencies = [
  "anyhow",
- "azure-keyvault-tui-macros",
+ "async-spawn-macros",
  "azure_core",
  "azure_identity",
  "clap",
@@ -158,17 +169,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "azure-keyvault-tui-macros"
-version = "0.1.0"
-dependencies = [
- "darling",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn 2.0.102",
 ]
 
 [[package]]
