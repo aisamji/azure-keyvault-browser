@@ -1,4 +1,4 @@
-use azure_keyvault_tui_macros::{TaskSpec, background_task};
+use async_spawn_macros::{TaskSpec, background_task};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{azure_api::{get_access_token_for_subscription, list_key_vaults}, tui::TuiEvent};
