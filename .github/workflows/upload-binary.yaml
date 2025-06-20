@@ -75,9 +75,9 @@ jobs:
         binaries='${{ needs.setup.outputs.binaries }}'
         binary_paths=""
         for binary in $(echo "$binaries" | jq -r '.[]'); do
-          binary_paths="$binary_paths target/release/$binary"
+          binary_paths="$binary_paths $binary"
         done
-        tar --create --gunzip --file='${{ needs.setup.outputs.crate_name }}-${{ needs.setup.outputs.version }}-${{ runner.os }}-${{ runner.arch }}.tar.gz' $binary_paths
+        tar --create --gunzip --file='${{ needs.setup.outputs.crate_name }}-${{ needs.setup.outputs.version }}-${{ runner.os }}-${{ runner.arch }}.tar.gz' --directory=target/release $binary_paths
 
     - name: Compress binary (windows)
       if: ${{ runner.os == 'windows' }}
@@ -93,6 +93,7 @@ jobs:
       uses: ncipollo/release-action@v1
       with:
         allowUpdates: true
+        omitBodyDuringUpdate: true
         tag: ${{ inputs.tag }}
         artifacts: "*.tar.gz,*.zip"
         token: ${{ github.token }}

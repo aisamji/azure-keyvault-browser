@@ -14,6 +14,7 @@ jobs:
 
     outputs:
       matrix: ${{ steps.setup-matrix.outputs.matrix }}
+      release_created: ${{ steps.release-plz.outputs.releases_created }}
 
     permissions:
       pull-requests: write
@@ -40,9 +41,11 @@ jobs:
           matrix: |
             os: [ubuntu-latest, windows-latest, macos-latest, macos-13]
             tag: ${{ toJSON(fromJSON(steps.release-plz.outputs.releases).*.tag) }}
+        if: ${{ steps.release-plz.outputs.releases_created == 'true' }}
 
   upload-binaries:
     needs: release-plz
+    if: ${{ needs.release-plz.outputs.releases_created == 'true' }}
     permissions:
       contents: write
 
