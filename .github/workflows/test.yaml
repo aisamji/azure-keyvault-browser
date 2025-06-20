@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest, macos-13 ]
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
 
     name: Check and Test
     runs-on: ${{ matrix.os }}
@@ -46,7 +46,7 @@ jobs:
   lint:
     name: Format and Clippy
     runs-on: ubuntu-latest
-    needs: validate  # First make it works, then worry about code quality.
+    needs: validate  # First make it work, then worry about code quality.
 
     steps:
       - name: Checkout repository
