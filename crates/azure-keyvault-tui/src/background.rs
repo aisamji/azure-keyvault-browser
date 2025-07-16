@@ -1,4 +1,7 @@
 use async_spawn_macros::{TaskSpec, background_task};
+use azure_identity::{AzureCliCredential, AzureCliCredentialOptions};
+use azure_security_keyvault_secrets::SecretClient;
+use futures::StreamExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
@@ -16,6 +19,9 @@ pub enum BackgroundTask {
     /// Lists Key Vaults for the given subscription ID.
     #[taskspec(callback = "load_key_vaults")]
     LoadKeyVaults { subscription_id: String },
+    /// Lists Secrets for the given key vault URL.
+    #[taskspec(callback = "load_secrets")]
+    LoadSecrets { key_vault_url: String, subscription_id: String },
 }
 
 /// Launches requested tasks in the background and waits for tasks to finish before exiting.
@@ -64,5 +70,56 @@ async fn load_key_vaults(subscription_id: String) {
     match list_key_vaults(&subscription_id, &access_token).await {
         Ok(key_vaults) => notify!(TuiEvent::KeyVaultsLoaded(key_vaults)),
         Err(e) => abort!("Failed to load Key Vaults: {}", e),
+    }
+}
+
+/// Lists Secrets for the given key vault and sends the result to the TUI.
+#[background_task(message_type = "TuiEvent", abort_with = "TuiEvent::SetErrorStatus")]
+async fn load_secrets(key_vault_url: String, subscription_id: String) {
+    // Show loading status
+    notify!(TuiEvent::SetSuccessStatus(
+        "Loading Secrets...".to_string(),
+    ));
+
+
+    // Create Azure CLI credential with the subscription
+    let credential = match AzureCliCredential::new(Some(AzureCliCredentialOptions {
+        subscription: Some(subscription_id),
+        ..Default::default()
+    })) {
+        Ok(cred) => cred,
+        Err(e) => {
+            abort!("Failed to create Azure CLI credential: {}", e);
+        }
+    };
+
+    // Create the secrets client
+    let client = match SecretClient::new(&key_vault_url, credential, None) {
+        Ok(client) => client,
+        Err(e) => {
+            abort!("Failed to create SecretClient: {}", e);
+        }
+    };
+
+    // List secret properties
+    match client.list_secret_properties(None) {
+        Ok(mut iter) => {
+            let mut secrets = Vec::new();
+            loop {
+                match iter.next().await {
+                    Some(Ok(secret_property)) => {
+                        secrets.push(secret_property);
+                    }
+                    Some(Err(e)) => {
+                        abort!("Failed to load secrets: {}", e);
+                    }
+                    None => break,
+                }
+            }
+            notify!(TuiEvent::SecretsLoaded(secrets));
+        }
+        Err(e) => {
+            abort!("Failed to create secrets iterator: {}", e);
+        }
     }
 }

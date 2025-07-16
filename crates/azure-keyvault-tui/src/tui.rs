@@ -10,6 +10,8 @@ use ratatui::{
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 
+use azure_security_keyvault_secrets::models::SecretProperties;
+
 use crate::{
     azure_api::KeyVault,
     azure_profile::{AzureProfile, AzureSubscription},
@@ -23,6 +25,8 @@ pub enum Screen {
     KeyVaults,
     /// Screen showing the list of available subscriptions.
     Subscriptions,
+    /// Screen showing the secrets for the selected key vault.
+    Secrets,
 }
 
 /// Represents different types of events that can occur in the Terminal User Interface (TUI).
@@ -47,6 +51,8 @@ pub enum TuiEvent {
     TerminalEvent(Event),
     /// Key Vaults have been successfully loaded.
     KeyVaultsLoaded(Vec<KeyVault>),
+    /// Secrets have been successfully loaded.
+    SecretsLoaded(Vec<SecretProperties>),
     /// Sets a success status message to display to the user.
     SetSuccessStatus(String),
     /// Sets an error status message to display to the user.
@@ -70,6 +76,8 @@ pub struct TuiState {
     key_vaults: Vec<KeyVault>,
     /// The currently activated key vault.
     selected_key_vault: Option<KeyVault>,
+    /// List of loaded secrets for the activated key vault.
+    secrets: Vec<SecretProperties>,
     /// The current screen being displayed.
     current_screen: Screen,
     /// Azure CLI version.
@@ -108,8 +116,9 @@ impl Default for TuiState {
             subscriptions,
             selected_subscription,
             key_vaults: Vec::new(),
-            table_state: TableState::default(),
             selected_key_vault: None,
+            secrets: Vec::new(),
+            table_state: TableState::default(),
             current_screen,
             azure_cli_version,
             status: None,
@@ -156,6 +165,11 @@ impl TuiState {
                         self.status =
                             Some(Ok(format!("Loaded {} key vaults", self.key_vaults.len())));
                     }
+                    TuiEvent::SecretsLoaded(secrets) => {
+                        self.secrets = secrets;
+                        self.status =
+                            Some(Ok(format!("Loaded {} secrets", self.secrets.len())));
+                    }
                     TuiEvent::SetSuccessStatus(message) => {
                         self.status = Some(Ok(message));
                     }
@@ -192,7 +206,7 @@ impl TuiState {
             Constraint::Fill(1),
             Constraint::Fill(1),
         ]);
-        let [metadata_area, global_keymaps_area, _local_keymaps_area] = header_layout.areas(header);
+        let [metadata_area, global_keymaps_area, local_keymaps_area] = header_layout.areas(header);
 
         // Render Metadata
         let metadata = Text::from(vec![
@@ -266,6 +280,42 @@ impl TuiState {
         ]);
         frame.render_widget(global_keymaps, global_keymaps_area);
 
+        // Render Local Keymaps based on current screen
+        let local_keymaps = match self.current_screen {
+            Screen::Secrets => Text::from(vec![
+                Line::from(vec![
+                    Span::from("<CR>").bold().yellow(),
+                    Span::from(" View"),
+                ]),
+                Line::from(vec![
+                    Span::from("<e>").bold().yellow(),
+                    Span::from(" Edit"),
+                ]),
+                Line::from(vec![
+                    Span::from("<n>").bold().yellow(),
+                    Span::from(" New"),
+                ]),
+                Line::from(vec![
+                    Span::from("<d>").bold().yellow(),
+                    Span::from(" Delete"),
+                ]),
+                Line::from(vec![
+                    Span::from("<@>").bold().yellow(),
+                    Span::from(" Versions"),
+                ]),
+                Line::from(vec![]),
+            ]),
+            _ => Text::from(vec![
+                Line::from(vec![]),
+                Line::from(vec![]),
+                Line::from(vec![]),
+                Line::from(vec![]),
+                Line::from(vec![]),
+                Line::from(vec![]),
+            ]),
+        };
+        frame.render_widget(local_keymaps, local_keymaps_area);
+
         // Render Body based on current screen
         match self.current_screen {
             Screen::KeyVaults => {
@@ -274,6 +324,10 @@ impl TuiState {
             }
             Screen::Subscriptions => {
                 let table = subscriptions_as_table(self.subscriptions.as_slice());
+                frame.render_stateful_widget(table, body_area, &mut self.table_state);
+            }
+            Screen::Secrets => {
+                let table = secrets_as_table(self.secrets.as_slice());
                 frame.render_stateful_widget(table, body_area, &mut self.table_state);
             }
         }
@@ -313,13 +367,16 @@ impl TuiState {
                 KeyCode::Char('K') if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
                     self.load_screen(Screen::KeyVaults, tx_bg_task);
                 }
+                KeyCode::Char('s') => {
+                    self.load_screen(Screen::Secrets, tx_bg_task);
+                }
                 KeyCode::Up => match self.current_screen {
-                    Screen::KeyVaults | Screen::Subscriptions => {
+                    Screen::KeyVaults | Screen::Subscriptions | Screen::Secrets => {
                         self.table_state.select_previous();
                     }
                 },
                 KeyCode::Down => match self.current_screen {
-                    Screen::KeyVaults | Screen::Subscriptions => {
+                    Screen::KeyVaults | Screen::Subscriptions | Screen::Secrets => {
                         self.table_state.select_next();
                     }
                 },
@@ -333,7 +390,8 @@ impl TuiState {
                                         "Activated Key Vault: {}",
                                         key_vault.name
                                     )));
-                                    // TODO: Automatically switch to Secrets screen.
+                                    // Auto-switch to Secrets screen and load secrets
+                                    self.load_screen(Screen::Secrets, tx_bg_task);
                                 }
                             }
                         }
@@ -346,7 +404,26 @@ impl TuiState {
                                 }
                             }
                         }
+                        Screen::Secrets => {
+                            if let Some(selected_index) = self.table_state.selected() {
+                                if let Some(_secret) = self.secrets.get(selected_index) {
+                                    self.status = Some(Ok("Secret selected".to_string()));
+                                }
+                            }
+                        }
                     }
+                }
+                KeyCode::Char('e') if self.current_screen == Screen::Secrets => {
+                    self.status = Some(Ok("Create new version of secret (not implemented)".to_string()));
+                }
+                KeyCode::Char('n') if self.current_screen == Screen::Secrets => {
+                    self.status = Some(Ok("Create new secret (not implemented)".to_string()));
+                }
+                KeyCode::Char('d') if self.current_screen == Screen::Secrets => {
+                    self.status = Some(Ok("Delete secret (not implemented)".to_string()));
+                }
+                KeyCode::Char('@') if self.current_screen == Screen::Secrets => {
+                    self.status = Some(Ok("List secret versions (not implemented)".to_string()));
                 }
                 _ => {
                     // Other key combinations not handled
@@ -385,6 +462,21 @@ impl TuiState {
             }
             Screen::Subscriptions => {
                 // No need to load anything, the file is cached upon startup.
+            }
+            Screen::Secrets => {
+                // Trigger secrets loading if we have a selected key vault and subscription
+                if let (Some(key_vault), Some(subscription)) = (&self.selected_key_vault, &self.selected_subscription) {
+                    self.secrets = vec![];
+                    self.table_state = TableState::default();
+                    let _ = tx_bg_task.blocking_send(BackgroundTask::LoadSecrets {
+                        key_vault_url: key_vault.vault_url().to_string(),
+                        subscription_id: subscription.id.clone(),
+                    });
+                } else {
+                    self.status = Some(Err(
+                        "No key vault selected. Please select a key vault first.".to_string(),
+                    ));
+                }
             }
         }
     }
@@ -454,4 +546,74 @@ fn keyvaults_as_table(keyvaults: &[KeyVault]) -> Table<'_> {
                 .title(Line::from(" Key Vaults ")),
         )
         .row_highlight_style(Style::default().bg(Color::Blue))
+}
+
+fn secrets_as_table(secrets: &[SecretProperties]) -> Table<'_> {
+    let header = Row::new(vec![
+        Cell::from("Name").style(Style::default().bold()),
+        Cell::from("Enabled").style(Style::default().bold()),
+        Cell::from("Updated").style(Style::default().bold()),
+        Cell::from("Expires").style(Style::default().bold()),
+    ]);
+
+    let rows: Vec<Row> = secrets
+        .iter()
+        .map(|secret| {
+            // Extract secret name from ID (last segment after the last '/')
+            let secret_name = secret
+                .id
+                .as_ref()
+                .and_then(|id| id.split('/').last())
+                .unwrap_or("Unknown");
+
+            // Get enabled status from attributes
+            let enabled = secret
+                .attributes
+                .as_ref()
+                .and_then(|attr| attr.enabled)
+                .map(|e| if e { "Yes" } else { "No" })
+                .unwrap_or("Unknown");
+
+            // Format updated date
+            let updated = secret
+                .attributes
+                .as_ref()
+                .and_then(|attr| attr.updated)
+                .map(|dt| dt.to_string())
+                .unwrap_or("None".to_string());
+
+            // Format expires date
+            let expires = secret
+                .attributes
+                .as_ref()
+                .and_then(|attr| attr.expires)
+                .map(|dt| dt.to_string())
+                .unwrap_or("None".to_string());
+
+            Row::new(vec![
+                Cell::from(secret_name),
+                Cell::from(enabled),
+                Cell::from(updated),
+                Cell::from(expires),
+            ])
+        })
+        .collect();
+
+    Table::new(
+        rows,
+        [
+            Constraint::Fill(2),
+            Constraint::Fill(1),
+            Constraint::Fill(2),
+            Constraint::Fill(2),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::new()
+            .borders(Borders::all())
+            .title_alignment(Alignment::Center)
+            .title(Line::from(" Secrets ")),
+    )
+    .row_highlight_style(Style::default().bg(Color::Blue))
 }

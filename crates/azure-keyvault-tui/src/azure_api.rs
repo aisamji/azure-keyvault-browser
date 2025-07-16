@@ -12,7 +12,7 @@ pub struct KeyVault {
     pub _location: String,
     #[serde(rename = "type")]
     pub _resource_type: String,
-    pub _properties: KeyVaultProperties,
+    pub properties: KeyVaultProperties,
 }
 
 impl KeyVault {
@@ -27,12 +27,17 @@ impl KeyVault {
             .get(4)
             .unwrap_or(&"Unknown")
     }
+
+    /// Returns the vault URL for use with Azure Key Vault secrets client.
+    pub fn vault_url(&self) -> &str {
+        &self.properties.vault_uri
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyVaultProperties {
-    pub _vault_uri: String,
+    pub vault_uri: String,
     pub _tenant_id: String,
     pub _sku: KeyVaultSku,
 }
@@ -83,7 +88,7 @@ pub async fn get_access_token_for_subscription(subscription_id: &str) -> Result<
     }))?;
     let scopes = ["https://management.azure.com/.default"];
 
-    let token_response = credential.get_token(&scopes).await?;
+    let token_response = credential.get_token(&scopes, None).await?;
 
     Ok(token_response.token.secret().to_string())
 }
