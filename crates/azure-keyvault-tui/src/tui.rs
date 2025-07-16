@@ -211,11 +211,11 @@ impl TuiState {
         // Render Metadata
         let metadata = Text::from(vec![
             Line::from(vec![
-                Span::from("Tenant ID: ").bold(),
+                Span::from("Tenant: ").bold(),
                 Span::from(
                     self.selected_subscription
                         .as_ref()
-                        .map(|s| s.tenant_id.as_str())
+                        .map(|s| s.tenant_display_name())
                         .unwrap_or("None"),
                 ),
             ]),
@@ -486,7 +486,7 @@ fn subscriptions_as_table(subscriptions: &[AzureSubscription]) -> Table<'_> {
     let header = Row::new(vec![
         Cell::from("Name").style(Style::default().bold()),
         Cell::from("ID").style(Style::default().bold()),
-        Cell::from("Tenant ID").style(Style::default().bold()),
+        Cell::from("Tenant").style(Style::default().bold()),
         Cell::from("Auth").style(Style::default().bold()),
     ]);
 
@@ -496,7 +496,7 @@ fn subscriptions_as_table(subscriptions: &[AzureSubscription]) -> Table<'_> {
             Row::new(vec![
                 Cell::from(subscription.name.clone()),
                 Cell::from(subscription.id.clone()),
-                Cell::from(subscription.tenant_id.clone()),
+                Cell::from(subscription.tenant_display_name()),
                 Cell::from(subscription.user.to_string()),
             ])
         })

@@ -88,7 +88,21 @@ pub struct AzureSubscription {
     pub user: AzureCredential,
     pub is_default: bool,
     pub tenant_id: String,
+    pub tenant_display_name: Option<String>,
+    pub _tenant_default_domain: Option<String>,
     pub _environment_name: String,
+}
+
+impl AzureSubscription {
+    /// Returns the tenant display name with fallback to tenant ID.
+    ///
+    /// Tries tenant_display_name first, then falls back to tenant_id.
+    pub fn tenant_display_name(&self) -> &str {
+        self.tenant_display_name
+            .as_ref()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&self.tenant_id)
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
