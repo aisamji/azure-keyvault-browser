@@ -1,26 +1,10 @@
-- Add screens for listing secrets, certificates, keys.
-  - Columns: name, Versions, creation date of latest version, status
-  - `<CR>` to view latest version of secret, etc.
-  - `e` to edit secret (i.e. create new version)
-  - `@` to view/select all secret versions
-  - `d` to delete secret.
-  - `n` to create new secret
-- Add versions screen
-  - Columns: id, creation date, status
-  - `<CR>` to view highlighted version of secret
-  - `e` to create new version, prepopulated with latest version
-  - `E` create new version, prepopulated with highlighted secret version
-  - `d` to deactivate/activate highlighted secret version
-  - `<ESC>` to go back to secret list.
-- Add display screen
-  - `<UP>/<DOWN>` for navigation
-  - `<ESC>` to go back
-  - `e` to create new version, prepopulated with displayed version.
-- Add capability to delete KeyVaults
-- Add capability to create KeyVaults.
-  - Would also need to add in management of RBAC (not sure if I want to support this).
-- Add capability to view secrets as key/value pairs
-- Add capability see/set secret metadata
-- Update subscription list to only show "Enabled" subscriptions.
-- Design how I want certificates to be listed (columns, metadata, keymaps, etc.).
-- Design how I want keys to be listed (columns, metadata, keymaps, etc.).
+## 1. Add Secret Metadata Screen
+- When a KeyVault is activated, automatically activate the Secret Metadata Screen
+- Upon activation, automatically load all the secrets in the activated KeyVault.
+- We can also press `s` (lowercase) from any screen to get to the Secret Metadata Screen.
+- Keymaps:
+    - `<CR>` - select the highlighted secret. For now this will simply display a message that the secret has been selected. Eventually, this will open the latest version of the secret.
+    - `e` - create new version of the secret
+    - `n` - create a new secret in the keyvault
+    - `d` - delete the highlighted secret
+    - `@` - list all versions of the secret. This screen will be implemented in a future version. For now, just display a message.
