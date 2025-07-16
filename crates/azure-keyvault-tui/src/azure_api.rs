@@ -1,3 +1,4 @@
+// An internal module since there is no official SDK to get the list of ALL keyvaults
 use anyhow::{Result, anyhow};
 use azure_core::credentials::TokenCredential;
 use azure_identity::{AzureCliCredential, AzureCliCredentialOptions};
